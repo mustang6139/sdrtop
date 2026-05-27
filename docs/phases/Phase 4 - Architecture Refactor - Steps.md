@@ -1,5 +1,7 @@
 # Phase 4 — Architecture Refactor: Step-by-Step
 
+← [[Home]] | [[Roadmap]] | [[Phase 4 - Architecture Refactor - Log]]
+
 **Goal:** `main.rs` becomes an entry point only. All logic is split into focused
 modules. Every step ends with a passing `cargo build`.
 
@@ -110,7 +112,7 @@ pub enum AppEvent {
 - Thread calls `crossterm::event::poll(100ms)` in a loop
 - On a key event: sends `AppEvent::Key(...)`
 - On timeout: sends `AppEvent::Tick`
-- Exposes `fn recv(&self) -> AppEvent` (blocking) or returns a `Receiver`
+- Exposes `fn recv(&self) -> AppEvent` (blocking)
 
 `run_app` in `main.rs` switches from `event::poll` / `event::read` to reading
 from the `EventStream` receiver.
@@ -165,18 +167,6 @@ pub fn build(size: Rect) -> Chunks
 
 ### `ui/mod.rs`
 ```rust
-pub mod footer;
-pub mod gains;
-pub mod header;
-pub mod layout;
-pub mod log;
-pub mod telemetry;
-// stubs for future phases (empty files already exist):
-pub mod overlay;
-pub mod sparkline;
-pub mod spectrum;
-pub mod waterfall;
-
 pub fn draw(f: &mut Frame, m: &SdrMetrics, board_name: &str, fw: &str, serial: &str) {
     let chunks = layout::build(f.size());
     header::render(f, chunks.header, board_name, fw, serial);
@@ -198,20 +188,20 @@ terminal.draw(|f| ui::draw(f, &m, board_name, fw_version, serial))?;
 
 ## Step 6 — `src/app.rs`
 
-Move `run_app` (and eventually `main` body) into an `App` struct.
+Move `run_app` (and `main` body) into an `App` struct.
 
 ```rust
 pub struct App {
-    pub state: Arc<Mutex<SdrMetrics>>,
-    pub device: Arc<hardware::device::Device>,
-    pub board_name: String,
-    pub fw_version: String,
-    pub serial: String,
-    events: event::EventStream,
+    state: Arc<Mutex<SdrMetrics>>,
+    device: Arc<hardware::Device>,   // kept for Drop
+    board_name: String,
+    fw_version: String,
+    serial: String,
+    events: EventStream,
 }
 
 impl App {
-    pub fn new() -> anyhow::Result<Self> { ... }  // device open, metric init, spawn polling task
+    pub fn new() -> anyhow::Result<Self> { ... }
     pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> { ... }
 }
 ```
@@ -220,11 +210,10 @@ impl App {
 ```rust
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // terminal setup
     let mut app = App::new()?;
+    // terminal setup
     let result = app.run(&mut terminal);
     // terminal teardown
-    result.map_err(Into::into)
 }
 ```
 
@@ -239,5 +228,6 @@ cargo build --release   # zero errors, zero warnings
 cargo clippy -- -D warnings  # zero findings
 ```
 
-Fix any warnings (unused imports, dead code not covered by `#[allow]`) before
-marking Phase 4 complete in `plan.md`.
+Fix any warnings before marking Phase 4 complete in [[Roadmap]].
+
+See [[Phase 4 - Architecture Refactor - Log]] for what actually happened during execution.

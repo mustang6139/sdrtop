@@ -1,24 +1,24 @@
 {
   "main": {
-    "id": "21d997842cbc16fe",
+    "id": "2599153d09dee50c",
     "type": "split",
     "children": [
       {
-        "id": "c2d5f094473b69e0",
+        "id": "ba41175547d4e2d8",
         "type": "tabs",
         "children": [
           {
-            "id": "936a47f4e484127d",
+            "id": "0ee4f466f9b3e542",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Roadmap.md",
+                "file": "docs/phases/Phase 4 - Architecture Refactor - Log.md",
                 "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Roadmap"
+              "title": "Phase 4 - Architecture Refactor - Log"
             }
           }
         ]
@@ -27,15 +27,15 @@
     "direction": "vertical"
   },
   "left": {
-    "id": "a1c7a8447afaa8e4",
+    "id": "af6ba286438ce731",
     "type": "split",
     "children": [
       {
-        "id": "59b60a5529c09cb7",
+        "id": "64813efd7e074970",
         "type": "tabs",
         "children": [
           {
-            "id": "0fe2001fd72d92ad",
+            "id": "2b5ce154b6222dad",
             "type": "leaf",
             "state": {
               "type": "file-explorer",
@@ -48,7 +48,7 @@
             }
           },
           {
-            "id": "5ed8458fe556e929",
+            "id": "7f33bde4529486c0",
             "type": "leaf",
             "state": {
               "type": "search",
@@ -65,7 +65,7 @@
             }
           },
           {
-            "id": "c8371c0236f71951",
+            "id": "5568e9223e3286a6",
             "type": "leaf",
             "state": {
               "type": "bookmarks",
@@ -81,20 +81,20 @@
     "width": 300
   },
   "right": {
-    "id": "0aed780604ceb184",
+    "id": "433561393b2601c6",
     "type": "split",
     "children": [
       {
-        "id": "7adcfad50b58c95a",
+        "id": "1efc3a13ddfb8abf",
         "type": "tabs",
         "children": [
           {
-            "id": "3ff7054b0359b350",
+            "id": "c03c2b30945bef0e",
             "type": "leaf",
             "state": {
               "type": "backlink",
               "state": {
-                "file": "plan.md",
+                "file": "docs/phases/Phase 4 - Architecture Refactor - Log.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,25 +104,25 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "plan visszahivatkozásai"
+              "title": "Phase 4 - Architecture Refactor - Log visszahivatkozásai"
             }
           },
           {
-            "id": "77b109553e017f30",
+            "id": "ed694f8b3a7e6b3d",
             "type": "leaf",
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "plan.md",
+                "file": "docs/phases/Phase 4 - Architecture Refactor - Log.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Kimenő kapcsolatok a(z) plan jegyzetből"
+              "title": "Kimenő kapcsolatok a(z) Phase 4 - Architecture Refactor - Log jegyzetből"
             }
           },
           {
-            "id": "8299ca0057b2bdf5",
+            "id": "32682993e8a0d122",
             "type": "leaf",
             "state": {
               "type": "tag",
@@ -137,7 +137,7 @@
             }
           },
           {
-            "id": "04acbf4cbc5b6363",
+            "id": "683f89b0e8e9bb39",
             "type": "leaf",
             "state": {
               "type": "all-properties",
@@ -151,18 +151,18 @@
             }
           },
           {
-            "id": "e01b49740e48ccad",
+            "id": "244a155565c9685c",
             "type": "leaf",
             "state": {
               "type": "outline",
               "state": {
-                "file": "plan.md",
+                "file": "docs/phases/Phase 4 - Architecture Refactor - Log.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "plan vázlata"
+              "title": "Phase 4 - Architecture Refactor - Log vázlata"
             }
           }
         ]
@@ -183,31 +183,13 @@
       "bases:Új bázis létrehozása": false
     }
   },
-  "active": "936a47f4e484127d",
+  "active": "0ee4f466f9b3e542",
   "lastOpenFiles": [
-    "Roadmap.md.tmp.18554.6200bac868a6",
-    "Roadmap.md.tmp.18554.fd16a4b68cec",
-    "Home.md",
-    "Roadmap.md",
-    "phases/Phase 3 - TUI Dashboard - Steps.md",
-    "Home.md.tmp.18554.a87f9895b322",
-    "phases/Phase 3 - TUI Dashboard - Log.md",
-    "phases/Phase 3 - TUI Dashboard - Log.md.tmp.18554.f99cc4ca7b0a",
-    "phases/Phase 3 - TUI Dashboard - Steps.md.tmp.18554.cad489532348",
-    "phases/Phase 2 - Telemetry Polling - Log.md",
-    "phases/Phase 2 - Telemetry Polling - Steps.md",
-    "phases/Phase 2 - Telemetry Polling - Log.md.tmp.18554.ef724cb09e8d",
-    "phases/Phase 1 - Device Discovery - Steps.md",
-    "phases/Phase 2 - Telemetry Polling - Steps.md.tmp.18554.7834f6660d9d",
-    "phases/Phase 1 - Device Discovery - Log.md",
-    "phases/Phase 1 - Device Discovery - Log.md.tmp.18554.3a00da4260ea",
-    "phases/Phase 4 - Architecture Refactor - Log.md",
-    "phases/Phase 1 - Device Discovery - Steps.md.tmp.18554.6af829f03273",
-    "phases/Phase 4 - Architecture Refactor - Log.md.tmp.18554.c2f7831a4461",
-    "phases/Phase 4 - Architecture Refactor - Steps.md",
-    "phases/Phase 4 - Architecture Refactor - Steps.md.tmp.18554.ce7e08280160",
-    "phase4_closed.md",
-    "plan.md",
-    "phase4.md"
+    "docs/phases/Phase 4 - Architecture Refactor - Steps.md",
+    "docs/phases/Phase 4 - Architecture Refactor - Log.md",
+    "README.md",
+    "README.md.tmp.18554.64f19527bd46",
+    "docs/Home.md",
+    "README.md.tmp.18554.f1cf8b618790"
   ]
 }
