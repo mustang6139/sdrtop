@@ -17,7 +17,7 @@ A working FFI layer against `libhackrf` with a safe Rust `Device` wrapper.
 
 The `hackrf` crate on crates.io (0.0.1) was evaluated and rejected — it is
 unmaintained and its struct definitions do not match the current `hackrf.h`.
-Instead, we wrote a custom `mod hackrf_ffi` with hand-crafted `#[repr(C)]` structs
+Instead, I wrote a custom `mod hackrf_ffi` with hand-crafted `#[repr(C)]` structs
 and an `extern "C"` block, linked via `pkg-config` in `build.rs`.
 
 ---

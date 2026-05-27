@@ -9,10 +9,10 @@ pass clean.
 
 ---
 
-## What we did vs. what was planned
+## What I did vs. what was planned
 
 The planned step order in [Phase 4 - Architecture Refactor - Steps](Phase%204%20-%20Architecture%20Refactor%20-%20Steps.md) was
-1 → 2 → 3 → 4 → 5 → 6 → 7. We reordered steps 1 and 2: `state.rs` was extracted
+1 → 2 → 3 → 4 → 5 → 6 → 7. I reordered steps 1 and 2: `state.rs` was extracted
 first because `device.rs` depends on `SdrMetrics` (via `rx_callback`), so it had
 to exist before `device.rs` could be written.
 

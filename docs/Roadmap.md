@@ -17,12 +17,22 @@ aims for future extensibility to other SDR platforms (e.g., RTL-SDR, LimeSDR, Ai
 
 ## Current Status
 
-| Phase | Status |
-|---|---|
-| 1 — Device discovery & basic info | ✅ Done |
-| 2 — Telemetry polling & USB throughput | ✅ Done |
-| 3 — TUI dashboard (gauges, sparkline, log, shortcuts) | ✅ Done |
-| 4 — Architecture refactor (modular layout) | ✅ Done |
+| Phase                                                                  | Status     |
+| ---------------------------------------------------------------------- | ---------- |
+| 1 — Device discovery & basic info                                      | ✅ Done     |
+| 2 — Telemetry polling & USB throughput                                 | ✅ Done     |
+| 3 — TUI dashboard (gauges, sparkline, log, shortcuts)                  | ✅ Done     |
+| 4 — Architecture refactor (modular layout)                             | ✅ Done     |
+| 5 — Interactive controls                                               | 🔲 Next    |
+| 6 — Dashboard engine (panel system, presets, layout config)            | 🔲 Planned |
+| 7 — Hardware health panels (drop rate, ADC saturation, IQ diagnostics) | 🔲 Planned |
+| 8 — FFT spectrum analyzer                                              | 🔲 Planned |
+| 9 — Waterfall display                                                  | 🔲 Planned |
+| 10 — Configuration & persistence                                       | 🔲 Planned |
+| 11 — Multi-device support                                              | 🔲 Planned |
+| 12 — PortaPack / Mayhem integration                                    | 🔲 Planned |
+| 13 — Polish & production readiness                                     | 🔲 Planned |
+| 14 — Distribution & community                                          | 🔲 Planned |
 
 ---
 
@@ -112,12 +122,12 @@ src/
   app.rs                App struct + new() + run()
   event.rs              AppEvent enum, EventStream (mpsc + thread)
   state.rs              SdrMetrics, constants
-  config.rs             stub — Phase 8
+  config.rs             stub — Phase 10
   hardware/
     mod.rs              pub use device::Device
     ffi.rs              #[repr(C)] structs + pub extern "C" declarations
     device.rs           Device wrapper + rx_callback
-    buffer.rs           stub — Phase 6
+    buffer.rs           stub — Phase 8
   ui/
     mod.rs              pub fn draw(frame, state, ...)
     layout.rs           Chunks struct + build(size)
@@ -128,13 +138,13 @@ src/
     footer.rs           render(f, area)
     overlay.rs          stub — Phase 5
     sparkline.rs        stub — Phase 5+
-    spectrum.rs         stub — Phase 6
-    waterfall.rs        stub — Phase 7
+    spectrum.rs         stub — Phase 8
+    waterfall.rs        stub — Phase 9
 ```
 
 ---
 
-## Phase 5 — Interactive Controls
+## Phase 5 — Interactive Controls 🔲 Next
 
 **Goal:** Every parameter visible in the UI can be changed live from the keyboard.
 Hardware is called immediately; the display reflects the new value within one render frame.
@@ -208,7 +218,106 @@ Hardware is called immediately; the display reflects the new value within one re
 
 ---
 
-## Phase 6 — FFT Spectrum Analyzer
+## Phase 6 — Dashboard Engine 🔲 Planned
+
+**Goal:** Replace the fixed TUI layout with a modular panel system where every display
+element is a named, self-contained unit. The user controls which panels are shown and
+where, via preset switching and a config file.
+
+- Design spec: [2026-05-27-dashboard-engine-design.md](superpowers/specs/2026-05-27-dashboard-engine-design.md)
+- Implementation plan: [2026-05-27-dashboard-engine.md](superpowers/plans/2026-05-27-dashboard-engine.md)
+
+### Architecture
+
+Every panel implements a `Panel` trait:
+
+```rust
+pub trait Panel: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn min_size(&self) -> (u16, u16);
+    fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics);
+}
+```
+
+A `PanelRegistry` holds all registered panels by name. A `LayoutEngine` reads the
+active preset from `LayoutConfig` and dispatches rendering to the right panels.
+
+### Preset layouts
+
+| Preset | Panels |
+|---|---|
+| `minimal` | header, telemetry, gains, log, footer |
+| `monitoring` | header, hardware_health, iq_diagnostics, telemetry, system_resources, log, footer |
+
+Runtime switching: `p` cycles presets, `1`/`2` jump directly.
+
+### Steps
+
+**6.1** — Add `serde`, `toml` to `Cargo.toml`  
+**6.2** — Define `Panel` trait in `src/ui/panel.rs`  
+**6.3** — Implement `PanelRegistry` in `src/ui/registry.rs`  
+**6.4** — Define `LayoutConfig`, `PresetConfig`, `PanelSpec`, `Position` in `src/config.rs`  
+**6.5** — Migrate existing panels (`header`, `telemetry`, `gains`, `log`, `footer`) to `Panel` trait  
+**6.6** — Implement `LayoutEngine` in `src/ui/engine.rs`  
+**6.7** — Wire `LayoutEngine` into `App`; handle `p`/`1`/`2` preset keys  
+**6.8** — `cargo build --release` + `cargo clippy -- -D warnings` — zero findings
+
+---
+
+## Phase 7 — Hardware Health Panels 🔲 Planned
+
+**Goal:** Make sample drops, ADC saturation, IQ quality, and system resource usage
+visible in real time — the metrics that turn sdrtop from an SDR frontend into a
+genuine resource monitor. All three are new `Panel` plugins.
+
+- Design spec: [2026-05-27-dashboard-engine-design.md](superpowers/specs/2026-05-27-dashboard-engine-design.md)
+- Implementation plan: [2026-05-27-dashboard-engine.md](superpowers/plans/2026-05-27-dashboard-engine.md)
+
+### New metrics (added to `SdrMetrics`)
+
+| Field | Source | Description |
+|---|---|---|
+| `drops_per_sec` + `drop_history` | `rx_callback` | Sample drop rate + 64-point sparkline |
+| `adc_saturation_pct` + `saturation_history` | `rx_callback` | ADC rail hits per callback + sparkline |
+| `adc_saturation_peak` | polling task | Session maximum saturation |
+| `iq_imbalance_db` | polling task | I vs Q channel power difference in dB |
+| `dc_offset_i` / `dc_offset_q` | polling task | Mean I/Q value (0 = no DC bias) |
+| `callback_jitter_us` | `rx_callback` | Rolling variance of callback timing |
+| `process_cpu_pct` | `/proc/self/stat` | Process CPU usage |
+| `process_rss_mb` | `/proc/self/status` | Process RSS memory in MB |
+
+### New panels
+
+| Panel | Content |
+|---|---|
+| `hardware_health` | Drop rate (value + sparkline + session total), ADC saturation (value + sparkline + session peak), callback jitter |
+| `iq_diagnostics` | DC offset I/Q bars, IQ imbalance in dB with directional hint |
+| `system_resources` | CPU% gauge, RAM gauge, USB throughput sparkline |
+
+### Color thresholds
+
+| Metric | Green | Yellow | Red |
+|---|---|---|---|
+| Drop rate | 0/s | 1–10/s | >10/s |
+| ADC saturation | <1% | 1–5% | >5% |
+| IQ imbalance | <1 dB | 1–3 dB | >3 dB |
+| Callback jitter | <500 µs | 500–2000 µs | >2000 µs |
+
+### Steps
+
+**7.1** — Add new fields to `SdrMetrics` in `src/state.rs`  
+**7.2** — Drop detection + ADC saturation + jitter measurement in `rx_callback`  
+**7.3** — Compute health metrics in polling task (drop rate, saturation%, IQ diagnostics)  
+**7.4** — System resource polling task reading `/proc/self/stat` and `/proc/self/status`  
+**7.5** — Implement `HardwareHealthPanel` in `src/ui/hardware_health.rs`  
+**7.6** — Implement `IqDiagnosticsPanel` in `src/ui/iq_diagnostics.rs`  
+**7.7** — Implement `SystemResourcesPanel` in `src/ui/system_resources.rs`  
+**7.8** — Register new panels; add `monitoring` preset to `LayoutConfig::default_config()`  
+**7.9** — `cargo build --release` + `cargo clippy -- -D warnings` — zero findings
+
+---
+
+## Phase 8 — FFT Spectrum Analyzer 🔲 Planned
 
 **Goal:** A live, full-width spectrum display on a Braille canvas — the feature that
 makes `sdrtop` genuinely useful for RF work instead of just pretty.
@@ -332,7 +441,7 @@ pub struct FftFrame {
 
 ---
 
-## Phase 7 — Waterfall Display
+## Phase 9 — Waterfall Display 🔲 Planned
 
 **Goal:** A scrolling 2D spectrum history below the spectrum plot.
 
@@ -373,7 +482,7 @@ pub struct FftFrame {
 
 ---
 
-## Phase 8 — Configuration & Persistence
+## Phase 10 — Configuration & Persistence 🔲 Planned
 
 **Goal:** Settings survive restarts.
 
@@ -413,7 +522,7 @@ show_waterfall   = true
 
 ---
 
-## Phase 9 — Multi-Device Support
+## Phase 11 — Multi-Device Support 🔲 Planned
 
 **Goal:** Multiple HackRF devices monitored simultaneously; `Tab` switches focus.
 
@@ -427,7 +536,7 @@ show_waterfall   = true
 
 ---
 
-## Phase 10 — PortaPack / Mayhem Integration
+## Phase 12 — PortaPack / Mayhem Integration 🔲 Planned
 
 **Goal:** Show Mayhem-specific telemetry when a PortaPack is connected.
 
@@ -448,7 +557,7 @@ show_waterfall   = true
 
 ---
 
-## Phase 11 — Polish & Production Readiness
+## Phase 13 — Polish & Production Readiness 🔲 Planned
 
 **Steps**
 
@@ -464,7 +573,7 @@ show_waterfall   = true
 
 ---
 
-## Phase 12 — Distribution & Community
+## Phase 14 — Distribution & Community 🔲 Planned
 
 **Steps**
 
@@ -485,4 +594,4 @@ show_waterfall   = true
 | Terminal lacks Braille / truecolor | broken display | `ColorDepth::detect()` at startup; ASCII fallback |
 | USB disconnect mid-session | crash or hang | polling task catches error, recovers on reconnect |
 | `main.rs` grows again | development friction | no file over 200 lines; clippy as CI gate |
-| Mutex poisoning under panic | terminal in raw mode | `std::panic::set_hook` restores terminal (Phase 11.5) |
+| Mutex poisoning under panic | terminal in raw mode | `std::panic::set_hook` restores terminal (Phase 13.5) |

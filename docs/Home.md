@@ -29,13 +29,15 @@
 | 3 | TUI dashboard (gauges, sparkline, log, shortcuts) | ✅ Done |
 | 4 | Architecture refactor (modular layout) | ✅ Done |
 | 5 | Interactive controls | 🔲 Next |
-| 6 | FFT spectrum analyzer | 🔲 Planned |
-| 7 | Waterfall display | 🔲 Planned |
-| 8 | Configuration & persistence | 🔲 Planned |
-| 9 | Multi-device support | 🔲 Planned |
-| 10 | PortaPack / Mayhem integration | 🔲 Planned |
-| 11 | Polish & production readiness | 🔲 Planned |
-| 12 | Distribution & community | 🔲 Planned |
+| 6 | Dashboard engine (panel system, presets, layout config) | 🔲 Planned |
+| 7 | Hardware health panels (drop rate, ADC saturation, IQ diagnostics) | 🔲 Planned |
+| 8 | FFT spectrum analyzer | 🔲 Planned |
+| 9 | Waterfall display | 🔲 Planned |
+| 10 | Configuration & persistence | 🔲 Planned |
+| 11 | Multi-device support | 🔲 Planned |
+| 12 | PortaPack / Mayhem integration | 🔲 Planned |
+| 13 | Polish & production readiness | 🔲 Planned |
+| 14 | Distribution & community | 🔲 Planned |
 
 ---
 
