@@ -1,6 +1,6 @@
 # Phase 3 — TUI Dashboard: Implementation Log
 
-← [[Home]] | [[Roadmap]] | [[Phase 3 - TUI Dashboard - Steps]]
+← [Home](../Home.md) | [Roadmap](../Roadmap.md) | [Phase 3 - TUI Dashboard - Steps](Phase%203%20-%20TUI%20Dashboard%20-%20Steps.md)
 
 **Status:** ✅ Complete
 

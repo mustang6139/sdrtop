@@ -8,15 +8,15 @@
 
 | Document | Purpose |
 |---|---|
-| [[Roadmap]] | Full project roadmap — phases, goals, risks |
-| [[Phase 1 - Device Discovery - Steps]] | Phase 1 — intended approach |
-| [[Phase 1 - Device Discovery - Log]] | Phase 1 — FFI design, HackrfDeviceList struct bug |
-| [[Phase 2 - Telemetry Polling - Steps]] | Phase 2 — intended approach |
-| [[Phase 2 - Telemetry Polling - Log]] | Phase 2 — dual is_streaming bug, rx_callback design |
-| [[Phase 3 - TUI Dashboard - Steps]] | Phase 3 — intended approach |
-| [[Phase 3 - TUI Dashboard - Log]] | Phase 3 — borrow checker fix, misleading footer removal |
-| [[Phase 4 - Architecture Refactor - Steps]] | Phase 4 — intended approach |
-| [[Phase 4 - Architecture Refactor - Log]] | Phase 4 — 670 → 43 lines, deviations from plan |
+| [Roadmap](Roadmap.md) | Full project roadmap — phases, goals, risks |
+| [Phase 1 - Device Discovery - Steps](phases/Phase%201%20-%20Device%20Discovery%20-%20Steps.md) | Phase 1 — intended approach |
+| [Phase 1 - Device Discovery - Log](phases/Phase%201%20-%20Device%20Discovery%20-%20Log.md) | Phase 1 — FFI design, HackrfDeviceList struct bug |
+| [Phase 2 - Telemetry Polling - Steps](phases/Phase%202%20-%20Telemetry%20Polling%20-%20Steps.md) | Phase 2 — intended approach |
+| [Phase 2 - Telemetry Polling - Log](phases/Phase%202%20-%20Telemetry%20Polling%20-%20Log.md) | Phase 2 — dual is_streaming bug, rx_callback design |
+| [Phase 3 - TUI Dashboard - Steps](phases/Phase%203%20-%20TUI%20Dashboard%20-%20Steps.md) | Phase 3 — intended approach |
+| [Phase 3 - TUI Dashboard - Log](phases/Phase%203%20-%20TUI%20Dashboard%20-%20Log.md) | Phase 3 — borrow checker fix, misleading footer removal |
+| [Phase 4 - Architecture Refactor - Steps](phases/Phase%204%20-%20Architecture%20Refactor%20-%20Steps.md) | Phase 4 — intended approach |
+| [Phase 4 - Architecture Refactor - Log](phases/Phase%204%20-%20Architecture%20Refactor%20-%20Log.md) | Phase 4 — 670 → 43 lines, deviations from plan |
 
 ---
 

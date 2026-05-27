@@ -1,6 +1,6 @@
 # Phase 4 — Architecture Refactor: Step-by-Step
 
-← [[Home]] | [[Roadmap]] | [[Phase 4 - Architecture Refactor - Log]]
+← [Home](../Home.md) | [Roadmap](../Roadmap.md) | [Phase 4 - Architecture Refactor - Log](Phase%204%20-%20Architecture%20Refactor%20-%20Log.md)
 
 **Goal:** `main.rs` becomes an entry point only. All logic is split into focused
 modules. Every step ends with a passing `cargo build`.
@@ -228,6 +228,6 @@ cargo build --release   # zero errors, zero warnings
 cargo clippy -- -D warnings  # zero findings
 ```
 
-Fix any warnings before marking Phase 4 complete in [[Roadmap]].
+Fix any warnings before marking Phase 4 complete in [Roadmap](../Roadmap.md).
 
-See [[Phase 4 - Architecture Refactor - Log]] for what actually happened during execution.
+See [Phase 4 - Architecture Refactor - Log](Phase%204%20-%20Architecture%20Refactor%20-%20Log.md) for what actually happened during execution.

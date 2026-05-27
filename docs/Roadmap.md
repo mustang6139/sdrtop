@@ -1,6 +1,6 @@
 # sdrtop — Roadmap to btop-level Quality
 
-← [[Home]]
+← [Home](Home.md)
 
 ## Vision
 
@@ -46,8 +46,8 @@ aims for future extensibility to other SDR platforms (e.g., RTL-SDR, LimeSDR, Ai
 **Goal:** Open a HackRF device via a hand-crafted libhackrf FFI layer and read
 its identity: board name, firmware version, and serial number.
 
-- Step-by-step execution guide: [[Phase 1 - Device Discovery - Steps]]
-- Implementation log (what was done, decisions made): [[Phase 1 - Device Discovery - Log]]
+- Step-by-step execution guide: [Phase 1 - Device Discovery - Steps](phases/Phase%201%20-%20Device%20Discovery%20-%20Steps.md)
+- Implementation log (what was done, decisions made): [Phase 1 - Device Discovery - Log](phases/Phase%201%20-%20Device%20Discovery%20-%20Log.md)
 
 ### Key outcomes
 
@@ -62,8 +62,8 @@ its identity: board name, firmware version, and serial number.
 **Goal:** Start RX streaming and measure live USB throughput via a tokio background
 task. Shared state updated every 200 ms behind `Arc<Mutex<SdrMetrics>>`.
 
-- Step-by-step execution guide: [[Phase 2 - Telemetry Polling - Steps]]
-- Implementation log (what was done, decisions made): [[Phase 2 - Telemetry Polling - Log]]
+- Step-by-step execution guide: [Phase 2 - Telemetry Polling - Steps](phases/Phase%202%20-%20Telemetry%20Polling%20-%20Steps.md)
+- Implementation log (what was done, decisions made): [Phase 2 - Telemetry Polling - Log](phases/Phase%202%20-%20Telemetry%20Polling%20-%20Log.md)
 
 ### Key outcomes
 
@@ -78,8 +78,8 @@ task. Shared state updated every 200 ms behind `Arc<Mutex<SdrMetrics>>`.
 **Goal:** Live ratatui dashboard with telemetry panel, gain gauges, USB throughput
 sparkline, log panel, and keyboard shortcuts.
 
-- Step-by-step execution guide: [[Phase 3 - TUI Dashboard - Steps]]
-- Implementation log (what was done, decisions made): [[Phase 3 - TUI Dashboard - Log]]
+- Step-by-step execution guide: [Phase 3 - TUI Dashboard - Steps](phases/Phase%203%20-%20TUI%20Dashboard%20-%20Steps.md)
+- Implementation log (what was done, decisions made): [Phase 3 - TUI Dashboard - Log](phases/Phase%203%20-%20TUI%20Dashboard%20-%20Log.md)
 
 ### Key outcomes
 
@@ -94,8 +94,8 @@ sparkline, log panel, and keyboard shortcuts.
 **Goal:** `main.rs` becomes an entry point only. Split into focused modules before
 adding more features. Every future phase has a clean home; no file exceeds ~200 lines.
 
-- Step-by-step execution guide: [[Phase 4 - Architecture Refactor - Steps]]
-- Implementation log (what was done, decisions made): [[Phase 4 - Architecture Refactor - Log]]
+- Step-by-step execution guide: [Phase 4 - Architecture Refactor - Steps](phases/Phase%204%20-%20Architecture%20Refactor%20-%20Steps.md)
+- Implementation log (what was done, decisions made): [Phase 4 - Architecture Refactor - Log](phases/Phase%204%20-%20Architecture%20Refactor%20-%20Log.md)
 
 ### Key outcomes
 

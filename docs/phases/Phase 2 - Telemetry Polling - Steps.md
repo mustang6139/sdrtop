@@ -1,6 +1,6 @@
 # Phase 2 — Telemetry Polling & USB Throughput: Steps
 
-← [[Home]] | [[Roadmap]] | [[Phase 2 - Telemetry Polling - Log]]
+← [Home](../Home.md) | [Roadmap](../Roadmap.md) | [Phase 2 - Telemetry Polling - Log](Phase%202%20-%20Telemetry%20Polling%20-%20Log.md)
 
 **Goal:** Start RX streaming and measure live USB throughput. A background tokio
 task polls the hardware state every 200 ms and updates a shared metrics struct.

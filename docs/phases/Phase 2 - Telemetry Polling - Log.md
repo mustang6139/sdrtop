@@ -1,6 +1,6 @@
 # Phase 2 — Telemetry Polling & USB Throughput: Implementation Log
 
-← [[Home]] | [[Roadmap]] | [[Phase 2 - Telemetry Polling - Steps]]
+← [Home](../Home.md) | [Roadmap](../Roadmap.md) | [Phase 2 - Telemetry Polling - Steps](Phase%202%20-%20Telemetry%20Polling%20-%20Steps.md)
 
 **Status:** ✅ Complete
 

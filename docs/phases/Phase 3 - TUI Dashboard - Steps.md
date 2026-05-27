@@ -1,6 +1,6 @@
 # Phase 3 — TUI Dashboard: Steps
 
-← [[Home]] | [[Roadmap]] | [[Phase 3 - TUI Dashboard - Log]]
+← [Home](../Home.md) | [Roadmap](../Roadmap.md) | [Phase 3 - TUI Dashboard - Log](Phase%203%20-%20TUI%20Dashboard%20-%20Log.md)
 
 **Goal:** Replace stdout output with a live ratatui TUI showing all telemetry.
 The dashboard must update in real time and respond to keyboard input.

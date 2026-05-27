@@ -1,6 +1,6 @@
 # Phase 4 — Architecture Refactor: Implementation Log
 
-← [[Home]] | [[Roadmap]] | [[Phase 4 - Architecture Refactor - Steps]]
+← [Home](../Home.md) | [Roadmap](../Roadmap.md) | [Phase 4 - Architecture Refactor - Steps](Phase%204%20-%20Architecture%20Refactor%20-%20Steps.md)
 
 **Status:** ✅ Complete  
 **Outcome:** `main.rs` went from 670 lines to 43 lines. Every module is self-contained
@@ -11,7 +11,7 @@ pass clean.
 
 ## What we did vs. what was planned
 
-The planned step order in [[Phase 4 - Architecture Refactor - Steps]] was
+The planned step order in [Phase 4 - Architecture Refactor - Steps](Phase%204%20-%20Architecture%20Refactor%20-%20Steps.md) was
 1 → 2 → 3 → 4 → 5 → 6 → 7. We reordered steps 1 and 2: `state.rs` was extracted
 first because `device.rs` depends on `SdrMetrics` (via `rx_callback`), so it had
 to exist before `device.rs` could be written.

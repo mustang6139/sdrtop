@@ -1,6 +1,6 @@
 # Phase 1 — Device Discovery & Basic Info: Implementation Log
 
-← [[Home]] | [[Roadmap]] | [[Phase 1 - Device Discovery - Steps]]
+← [Home](../Home.md) | [Roadmap](../Roadmap.md) | [Phase 1 - Device Discovery - Steps](Phase%201%20-%20Device%20Discovery%20-%20Steps.md)
 
 **Status:** ✅ Complete
 

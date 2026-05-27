@@ -1,6 +1,6 @@
 # Phase 1 — Device Discovery & Basic Info: Steps
 
-← [[Home]] | [[Roadmap]] | [[Phase 1 - Device Discovery - Log]]
+← [Home](../Home.md) | [Roadmap](../Roadmap.md) | [Phase 1 - Device Discovery - Log](Phase%201%20-%20Device%20Discovery%20-%20Log.md)
 
 **Goal:** Open a HackRF device, read its identity (board name, firmware version,
 serial number), and print that information. No TUI yet — just a working FFI layer
