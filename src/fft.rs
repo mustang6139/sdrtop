@@ -125,7 +125,7 @@ impl FftWorker {
                         .enumerate()
                         .map(|(i, &b)| (10f32.powf(b / 10.0), i))
                         .collect();
-                    indexed.sort_unstable_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+                    indexed.sort_unstable_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
                     let mut acc = 0f32;
                     let mut min_bin = smoothed.len();
                     let mut max_bin = 0usize;

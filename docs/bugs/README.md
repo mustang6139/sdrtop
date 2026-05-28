@@ -34,6 +34,14 @@ Each bug has its own detailed file; this document is the index.
 
 ---
 
+## Audit
+
+| ID | Title | Status |
+|---|---|---|
+| [BUG-004](bug-004-comprehensive-audit.md) | Comprehensive code audit (2026-05-28) — 1 crash-risk fixed, 2 safe concerns documented | ✅ Fixed |
+
+---
+
 ## How to add a new entry
 
 1. Create `docs/bugs/bug-NNN-short-description.md` using the template below.
