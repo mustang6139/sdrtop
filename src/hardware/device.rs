@@ -57,9 +57,11 @@ pub extern "C" fn rx_callback(transfer: *mut hackrf_transfer) -> c_int {
                 q_sq  += q * q;
                 if chunk[0] == 0x80 || chunk[0] == 0x7F { saturated += 1; }
                 if chunk[1] == 0x80 || chunk[1] == 0x7F { saturated += 1; }
-                // IQ amplitude histogram: Chebyshev distance, 32 bins of width 4
+                // IQ amplitude histogram: Chebyshev distance, 32 bins of width 4.
+                // Clamp to bin 31: i8::MIN.unsigned_abs() == 128, which would overflow
+                // a 32-element array without the min(31).
                 let amp = i_byte.unsigned_abs().max(q_byte.unsigned_abs());
-                m.acc_iq_hist[(amp / 4) as usize] += 1;
+                m.acc_iq_hist[((amp / 4) as usize).min(31)] += 1;
             }
 
             let pairs = (buf.len() / 2) as u64;
@@ -139,15 +141,27 @@ mod tests {
     #[test]
     fn histogram_bin_for_max_amplitude() {
         let amp: u8 = 127;
-        let bin = (amp / 4) as usize;
+        let bin = ((amp / 4) as usize).min(31);
         assert_eq!(bin, 31);
     }
 
     #[test]
     fn histogram_bin_for_zero_amplitude() {
         let amp: u8 = 0;
-        let bin = (amp / 4) as usize;
+        let bin = ((amp / 4) as usize).min(31);
         assert_eq!(bin, 0);
+    }
+
+    #[test]
+    fn histogram_bin_i8_min_does_not_overflow() {
+        // i8::MIN.unsigned_abs() == 128, which without clamping would index [32] on
+        // a [u64; 32] array and panic inside the C rx_callback (no Drop = HackRF stuck).
+        let i_byte: i8 = i8::MIN;
+        let q_byte: i8 = 0;
+        let amp = i_byte.unsigned_abs().max(q_byte.unsigned_abs());
+        assert_eq!(amp, 128);
+        let bin = ((amp / 4) as usize).min(31);
+        assert_eq!(bin, 31);  // clamped to last bin, not 32
     }
 }
 
