@@ -107,6 +107,9 @@ pub struct SdrMetrics {
     // --- IQ amplitude histogram (snapshot from accumulator, read by UI) ---
     pub iq_amplitude_hist: [u64; 32],
 
+    // USB transfer errors (valid_length == 0 from libhackrf) — session total
+    pub usb_errors_session: u64,
+
     // --- Accumulators (written by rx_callback, reset by polling task) ---
     pub acc_drops: u64,
     pub acc_saturated: u64,

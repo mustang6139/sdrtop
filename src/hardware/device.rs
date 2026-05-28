@@ -17,11 +17,33 @@ unsafe impl Send for Device {}
 unsafe impl Sync for Device {}
 
 pub extern "C" fn rx_callback(transfer: *mut hackrf_transfer) -> c_int {
+    // Catch any Rust panic before it crosses the C FFI boundary.
+    // Without this, a panic would cause UB (unwind through C frames) or abort(),
+    // neither of which calls Drop — leaving the HackRF in a stuck streaming state.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        rx_callback_safe(transfer)
+    }));
+    result.unwrap_or(0)
+}
+
+fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
     unsafe {
+        if transfer.is_null() { return 0; }
         let t = &*transfer;
         let ctx_ptr = t.rx_ctx as *const RxContext;
         if ctx_ptr.is_null() { return 0; }
         let ctx = &*ctx_ptr;
+
+        // Guard against malformed USB transfers — libhackrf uses i32 and can return
+        // error codes (negative) or zero-length transfers on USB instability.
+        if t.buffer.is_null() { return 0; }
+        if t.valid_length < 0 { return 0; }
+        if t.valid_length == 0 {
+            if let Ok(mut m) = ctx.metrics.lock() {
+                m.usb_errors_session += 1;
+            }
+            return 0;
+        }
 
         let buf = std::slice::from_raw_parts(
             t.buffer as *const u8,

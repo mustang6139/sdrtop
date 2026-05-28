@@ -66,17 +66,17 @@ impl Panel for IqHistogramPanel {
         let high_cols = (n_bins * 4 / 32).min(chart_area.width as usize);
         let mid_cols  = n_bins.saturating_sub(low_cols + high_cols);
 
-        // Build colored column groups
-        let low_rows:  Vec<String> = rows.iter().map(|r| r[..low_cols.min(r.len())].to_string()).collect();
-        let mid_rows:  Vec<String> = rows.iter().map(|r| {
-            let start = low_cols.min(r.len());
-            let end = (low_cols + mid_cols).min(r.len());
-            r[start..end].to_string()
-        }).collect();
-        let high_rows: Vec<String> = rows.iter().map(|r| {
-            let start = (low_cols + mid_cols).min(r.len());
-            r[start..].to_string()
-        }).collect();
+        // Build colored column groups — split by character index, not byte index,
+        // because '█' is 3 bytes in UTF-8 and byte-slicing would panic mid-char.
+        let low_rows:  Vec<String> = rows.iter()
+            .map(|r| r.chars().take(low_cols).collect())
+            .collect();
+        let mid_rows:  Vec<String> = rows.iter()
+            .map(|r| r.chars().skip(low_cols).take(mid_cols).collect())
+            .collect();
+        let high_rows: Vec<String> = rows.iter()
+            .map(|r| r.chars().skip(low_cols + mid_cols).collect())
+            .collect();
 
         // Render as 3 vertical strips with different fg colors
         let h_layout = Layout::default()
@@ -114,5 +114,25 @@ impl Panel for IqHistogramPanel {
             Span::styled("Dynamic range OK", Style::default().fg(Color::Green))
         };
         f.render_widget(Paragraph::new(label), label_area);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn histogram_row_split_does_not_panic_on_block_chars() {
+        // '█' is 3 bytes in UTF-8; byte-slicing at column index 8 would panic
+        // mid-character. chars().take/skip must be used instead.
+        let row: String = (0..32).map(|_| '█').collect();
+        let low_cols = 8usize;
+        let mid_cols = 16usize;
+
+        let low:  String = row.chars().take(low_cols).collect();
+        let mid:  String = row.chars().skip(low_cols).take(mid_cols).collect();
+        let high: String = row.chars().skip(low_cols + mid_cols).collect();
+
+        assert_eq!(low.chars().count(),  8);
+        assert_eq!(mid.chars().count(), 16);
+        assert_eq!(high.chars().count(), 8);
     }
 }

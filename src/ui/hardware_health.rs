@@ -36,6 +36,7 @@ impl Panel for HardwareHealthPanel {
                 Constraint::Length(1),
                 Constraint::Length(2),
                 Constraint::Length(1),
+                Constraint::Length(1),
                 Constraint::Min(0),
             ])
             .split(inner);
@@ -87,6 +88,15 @@ impl Panel for HardwareHealthPanel {
                 Style::default().fg(jitter_color),
             )),
             rows[4],
+        );
+
+        let usb_color = if state.usb_errors_session > 0 { Color::Red } else { Color::Green };
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                format!("USB errors: {} (session)", state.usb_errors_session),
+                Style::default().fg(usb_color),
+            )),
+            rows[5],
         );
     }
 }

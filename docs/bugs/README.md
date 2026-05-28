@@ -2,62 +2,63 @@
 
 ← [Home](../Home.md)
 
-Ismert és javított hibák, phase-enként csoportosítva.  
-Minden bug saját részletes fájlt kap; ez a dokumentum az index.
+Known and fixed bugs, grouped by phase.  
+Each bug has its own detailed file; this document is the index.
 
 ---
 
-## Konvenciók
+## Conventions
 
-| Státusz | Jelentés |
+| Status | Meaning |
 |---|---|
-| ✅ Fixed | A fix benne van a kódbázisban, regressziós teszt is van hozzá |
-| ⚠️ Workaround | Ismert kerülő megoldás létezik, szoftveres fix még nem |
-| 🔲 Open | Nincs megoldás, nyitott probléma |
+| ✅ Fixed | Fix is in the codebase; regression test included |
+| ⚠️ Workaround | Known workaround exists; no software fix yet |
+| 🔲 Open | No resolution; problem is open |
 
 ---
 
 ## Phase 11 — HackRF Deep Diagnostics
 
-| ID | Cím | Státusz |
+| ID | Title | Status |
 |---|---|---|
 | [BUG-001](bug-001-iq-histogram-oob.md) | IQ histogram bin index out-of-bounds (`i8::MIN`) | ✅ Fixed |
+| [BUG-003](bug-003-iq-histogram-utf8-slice.md) | IQ histogram panel UTF-8 string slice panic (`█` multi-byte) | ✅ Fixed |
 
 ---
 
 ## Platform / Hardware
 
-| ID | Cím | Státusz |
+| ID | Title | Status |
 |---|---|---|
-| [BUG-002](bug-002-usbc-streaming-instability.md) | USB-C porton instabil HackRF streaming | ⚠️ Workaround |
+| [BUG-002](bug-002-usbc-streaming-instability.md) | Unstable HackRF streaming on USB-C port | ⚠️ Workaround |
 
 ---
 
-## Hogyan adj hozzá új bejegyzést
+## How to add a new entry
 
-1. Hozz létre `docs/bugs/bug-NNN-rovid-leiras.md` fájlt az alábbi template alapján.
-2. Add hozzá a fenti táblázathoz a megfelelő phase-szekcióba (vagy hozz létre új szekciót).
-3. Ha a fix kódváltozással jár: hivatkozz a releváns fájlra és sorra.
+1. Create `docs/bugs/bug-NNN-short-description.md` using the template below.
+2. Add it to the table above under the appropriate phase section (or create a new section).
+3. If the fix involves a code change, reference the relevant file and line.
 
 ### Template
 
 ```markdown
-# BUG-NNN — Cím
+# BUG-NNN — Title
 
 **Phase:** N  
-**Státusz:** ✅ Fixed / ⚠️ Workaround / 🔲 Open  
-**Felfedezve:** YYYY-MM-DD  
-**Javítva:** YYYY-MM-DD  
+**Status:** ✅ Fixed / ⚠️ Workaround / 🔲 Open  
+**Discovered:** YYYY-MM-DD  
+**Fixed:** YYYY-MM-DD  
 
-## Tünet
+## Symptom
 ...
 
-## Gyökérok
+## Root cause
 ...
 
 ## Fix
 ...
 
-## Regressziós teszt
+## Regression test
 ...
 ```

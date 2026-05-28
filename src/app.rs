@@ -94,6 +94,8 @@ impl App {
             occupied_bw_hz:     0,
             iq_amplitude_hist:  [0u64; 32],
 
+            usb_errors_session: 0,
+
             acc_drops: 0,
             acc_saturated: 0,
             acc_i_sum: 0,
@@ -108,7 +110,7 @@ impl App {
         }));
 
         {
-            let mut m = state.lock().unwrap();
+            let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
             m.push_log(format!("Connected: {} | Serial: {}", board_name, serial));
             m.push_log(format!("Firmware: {}", fw_version));
             m.push_log(format!("Board: {} | USB API: {:#06x}",
@@ -146,8 +148,20 @@ impl App {
             loop {
                 let now = Instant::now();
 
+                // Detect unexpected streaming stop (USB error, cable issue, device reset).
+                // Must check before the rx_enabled/hw_rx_active gate below, otherwise
+                // hw_rx_active stays true and neither branch triggers — app gets stuck.
+                if hw_rx_active && !device_bg.is_streaming() {
+                    let _ = device_bg.stop_rx();
+                    hw_rx_active = false;
+                    let mut m = state_bg.lock().unwrap_or_else(|e| e.into_inner());
+                    m.rx_enabled = false;
+                    m.hw_streaming = false;
+                    m.push_log("WARNING: Streaming stopped unexpectedly — press [Space] to restart");
+                }
+
                 {
-                    let mut m = state_bg.lock().unwrap();
+                    let mut m = state_bg.lock().unwrap_or_else(|e| e.into_inner());
                     let elapsed_ms = now.duration_since(m.last_poll_time).as_millis() as u64;
                     let bytes = m.bytes_since_last_poll;
                     m.bytes_since_last_poll = 0;
@@ -231,17 +245,17 @@ impl App {
                     let _ = acc_drops;
                 }
 
-                let rx_enabled = state_bg.lock().unwrap().rx_enabled;
+                let rx_enabled = state_bg.lock().unwrap_or_else(|e| e.into_inner()).rx_enabled;
                 if rx_enabled && !hw_rx_active {
                     let user_param = Arc::as_ptr(&rx_ctx_bg) as *mut libc::c_void;
                     match device_bg.start_rx(hardware::rx_callback, user_param) {
                         Ok(()) => {
                             hw_rx_active = true;
-                            state_bg.lock().unwrap().push_log("RX streaming started");
+                            state_bg.lock().unwrap_or_else(|e| e.into_inner()).push_log("RX streaming started");
                         }
                         Err(e) => {
                             let msg = format!("Error starting RX: {}", e);
-                            let mut m = state_bg.lock().unwrap();
+                            let mut m = state_bg.lock().unwrap_or_else(|e| e.into_inner());
                             m.rx_enabled = false;
                             m.push_log(msg);
                         }
@@ -249,7 +263,7 @@ impl App {
                 } else if !rx_enabled && hw_rx_active {
                     let result = device_bg.stop_rx();
                     hw_rx_active = false;
-                    let mut m = state_bg.lock().unwrap();
+                    let mut m = state_bg.lock().unwrap_or_else(|e| e.into_inner());
                     match result {
                         Ok(()) => m.push_log("RX streaming stopped"),
                         Err(e) => m.push_log(format!("Error stopping RX: {}", e)),
@@ -327,7 +341,7 @@ impl App {
     fn save_config(&self) {
         let Some(path) = &self.config_path else { return };
         let (freq, rate, lna, vga, amp, wf_rows) = {
-            let m = self.state.lock().unwrap();
+            let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
             (m.frequency, m.config_sample_rate, m.lna_gain,
              m.vga_gain, m.amp_enabled, m.waterfall.max_rows)
         };
@@ -349,7 +363,7 @@ impl App {
 
     pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
         loop {
-            let m = self.state.lock().unwrap().clone();
+            let m = self.state.lock().unwrap_or_else(|e| e.into_inner()).clone();
             terminal.draw(|f| {
                 self.engine.draw(f, &m);
                 if self.show_help {
@@ -359,7 +373,7 @@ impl App {
 
             match self.events.recv() {
                 AppEvent::Key(key) => {
-                    let input_mode = self.state.lock().unwrap().input_mode.clone();
+                    let input_mode = self.state.lock().unwrap_or_else(|e| e.into_inner()).input_mode.clone();
                     match input_mode {
                         InputMode::Normal => match key.code {
                             KeyCode::Char('q') => {
@@ -367,7 +381,7 @@ impl App {
                                 return Ok(());
                             }
                             KeyCode::Char(' ') => {
-                                let mut m = self.state.lock().unwrap();
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                 m.rx_enabled = !m.rx_enabled;
                             }
                             KeyCode::Char('r') => {
@@ -378,7 +392,7 @@ impl App {
                                     self.device.set_sample_rate(DEFAULT_SAMPLE_RATE),
                                     self.device.set_amp_enable(false),
                                 ];
-                                let mut m = self.state.lock().unwrap();
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                 m.reset_to_defaults();
                                 for r in results {
                                     if let Err(e) = r {
@@ -387,7 +401,7 @@ impl App {
                                 }
                             }
                             KeyCode::Char('f') => {
-                                let mut m = self.state.lock().unwrap();
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                 m.input_mode = InputMode::FrequencyInput;
                                 m.input_buf.clear();
                                 m.push_log("Enter frequency in MHz, then press Enter");
@@ -398,46 +412,46 @@ impl App {
                             KeyCode::Char('p') => {
                                 self.engine.cycle_preset();
                                 let name = self.engine.active_preset().to_string();
-                                self.state.lock().unwrap().push_log(format!("Preset: {}", name));
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log(format!("Preset: {}", name));
                             }
                             KeyCode::Char('1') => {
                                 self.engine.set_preset("minimal");
-                                self.state.lock().unwrap().push_log("Preset: minimal");
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: minimal");
                             }
                             KeyCode::Char('2') => {
                                 self.engine.set_preset("monitoring");
-                                self.state.lock().unwrap().push_log("Preset: monitoring");
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: monitoring");
                             }
                             KeyCode::Char('3') => {
                                 self.engine.set_preset("spectrum");
-                                self.state.lock().unwrap().push_log("Preset: spectrum");
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: spectrum");
                             }
                             KeyCode::Char('4') => {
                                 self.engine.set_preset("waterfall");
-                                self.state.lock().unwrap().push_log("Preset: waterfall");
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: waterfall");
                             }
                             KeyCode::Char('5') => {
                                 self.engine.set_preset("spectrum_waterfall");
-                                self.state.lock().unwrap().push_log("Preset: spectrum+waterfall");
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: spectrum+waterfall");
                             }
                             KeyCode::Char('6') => {
                                 self.engine.set_preset("lab");
-                                self.state.lock().unwrap().push_log("Preset: lab");
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: lab");
                             }
                             KeyCode::Char('w') => {
-                                let mut m = self.state.lock().unwrap();
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                 m.waterfall.paused = !m.waterfall.paused;
                                 let s = if m.waterfall.paused { "paused" } else { "resumed" };
                                 m.push_log(format!("Waterfall {}", s));
                             }
                             KeyCode::Up => {
                                 let (gain, result) = {
-                                    let m = self.state.lock().unwrap();
+                                    let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                     let new_gain = (m.lna_gain + 8).min(40);
                                     let result = self.device.set_lna_gain(new_gain);
                                     (new_gain, result)
                                 };
-                                let mut m = self.state.lock().unwrap();
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                 match result {
                                     Ok(()) => {
                                         m.lna_gain = gain;
@@ -448,12 +462,12 @@ impl App {
                             }
                             KeyCode::Down => {
                                 let (gain, result) = {
-                                    let m = self.state.lock().unwrap();
+                                    let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                     let new_gain = m.lna_gain.saturating_sub(8);
                                     let result = self.device.set_lna_gain(new_gain);
                                     (new_gain, result)
                                 };
-                                let mut m = self.state.lock().unwrap();
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                 match result {
                                     Ok(()) => {
                                         m.lna_gain = gain;
@@ -464,12 +478,12 @@ impl App {
                             }
                             KeyCode::Char('[') => {
                                 let (gain, result) = {
-                                    let m = self.state.lock().unwrap();
+                                    let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                     let new_gain = m.vga_gain.saturating_sub(2);
                                     let result = self.device.set_vga_gain(new_gain);
                                     (new_gain, result)
                                 };
-                                let mut m = self.state.lock().unwrap();
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                 match result {
                                     Ok(()) => {
                                         m.vga_gain = gain;
@@ -480,12 +494,12 @@ impl App {
                             }
                             KeyCode::Char(']') => {
                                 let (gain, result) = {
-                                    let m = self.state.lock().unwrap();
+                                    let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                     let new_gain = (m.vga_gain + 2).min(62);
                                     let result = self.device.set_vga_gain(new_gain);
                                     (new_gain, result)
                                 };
-                                let mut m = self.state.lock().unwrap();
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                 match result {
                                     Ok(()) => {
                                         m.vga_gain = gain;
@@ -496,12 +510,12 @@ impl App {
                             }
                             KeyCode::Char('a') => {
                                 let (enabled, result) = {
-                                    let m = self.state.lock().unwrap();
+                                    let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                     let new_state = !m.amp_enabled;
                                     let result = self.device.set_amp_enable(new_state);
                                     (new_state, result)
                                 };
-                                let mut m = self.state.lock().unwrap();
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                 match result {
                                     Ok(()) => {
                                         m.amp_enabled = enabled;
@@ -517,20 +531,20 @@ impl App {
                         },
                         InputMode::FrequencyInput => match key.code {
                             KeyCode::Esc => {
-                                let mut m = self.state.lock().unwrap();
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                 m.input_mode = InputMode::Normal;
                                 m.input_buf.clear();
                                 m.push_log("Frequency input cancelled");
                             }
                             KeyCode::Backspace => {
-                                self.state.lock().unwrap().input_buf.pop();
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).input_buf.pop();
                             }
                             KeyCode::Char(c) if c.is_ascii_digit() || c == '.' => {
-                                self.state.lock().unwrap().input_buf.push(c);
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).input_buf.push(c);
                             }
                             KeyCode::Enter => {
                                 let (freq_hz, result) = {
-                                    let m = self.state.lock().unwrap();
+                                    let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                     match m.input_buf.parse::<f64>() {
                                         Ok(mhz) if mhz > 0.0 => {
                                             let hz = (mhz * 1_000_000.0) as u64;
@@ -540,7 +554,7 @@ impl App {
                                         _ => (None, None),
                                     }
                                 };
-                                let mut m = self.state.lock().unwrap();
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                 match (freq_hz, result) {
                                     (Some(hz), Some(Ok(()))) => {
                                         m.frequency = hz;
