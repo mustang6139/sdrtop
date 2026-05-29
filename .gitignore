@@ -11,3 +11,7 @@ target/
 # Obsidian — machine-specific config
 docs/.obsidian/
 .obsidian/
+
+# Claude code superpowers
+.superpowers/
+docs/superpowers/

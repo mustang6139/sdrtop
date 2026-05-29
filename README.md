@@ -20,11 +20,7 @@ It runs entirely in the terminal. No GUI, no Electron, no browser. A real-time d
 
 ## What it actually shows
 
-
 .
-
-
-```
 
 - **Spectrum analyzer** — FFT with EMA smoothing and peak hold
 - **Waterfall** — scrolling spectrogram history (truecolor, 256-color, or 16-color)

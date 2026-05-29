@@ -185,7 +185,7 @@ impl LayoutConfig {
         use Position::*;
         let minimal = PresetConfig {
             panels: vec![
-                PanelSpec { name: "header".into(),    position: Top,    height: Some(3), width_pct: None },
+                PanelSpec { name: "header".into(),    position: Top,    height: Some(5), width_pct: None },
                 PanelSpec { name: "telemetry".into(), position: Body,   height: None,    width_pct: None },
                 PanelSpec { name: "gains".into(),     position: Right,  height: None,    width_pct: Some(50) },
                 PanelSpec { name: "log".into(),       position: Bottom, height: Some(9), width_pct: None },
@@ -194,7 +194,7 @@ impl LayoutConfig {
         };
         let monitoring = PresetConfig {
             panels: vec![
-                PanelSpec { name: "header".into(),           position: Top,    height: Some(3), width_pct: None     },
+                PanelSpec { name: "header".into(),           position: Top,    height: Some(5), width_pct: None     },
                 PanelSpec { name: "hardware_health".into(),  position: Left,   height: None,    width_pct: Some(50) },
                 PanelSpec { name: "iq_diagnostics".into(),   position: Left,   height: None,    width_pct: Some(50) },
                 PanelSpec { name: "telemetry".into(),        position: Right,  height: None,    width_pct: Some(50) },
@@ -205,7 +205,7 @@ impl LayoutConfig {
         };
         let spectrum = PresetConfig {
             panels: vec![
-                PanelSpec { name: "header".into(),   position: Top,    height: Some(3), width_pct: None },
+                PanelSpec { name: "header".into(),   position: Top,    height: Some(5), width_pct: None },
                 PanelSpec { name: "spectrum".into(),  position: Body,   height: None,    width_pct: None },
                 PanelSpec { name: "log".into(),       position: Bottom, height: Some(5), width_pct: None },
                 PanelSpec { name: "footer".into(),    position: Bottom, height: Some(3), width_pct: None },
@@ -213,7 +213,7 @@ impl LayoutConfig {
         };
         let waterfall = PresetConfig {
             panels: vec![
-                PanelSpec { name: "header".into(),   position: Top,    height: Some(3), width_pct: None },
+                PanelSpec { name: "header".into(),   position: Top,    height: Some(5), width_pct: None },
                 PanelSpec { name: "waterfall".into(), position: Body,   height: None,    width_pct: None },
                 PanelSpec { name: "log".into(),       position: Bottom, height: Some(5), width_pct: None },
                 PanelSpec { name: "footer".into(),    position: Bottom, height: Some(3), width_pct: None },
@@ -221,7 +221,7 @@ impl LayoutConfig {
         };
         let spectrum_waterfall = PresetConfig {
             panels: vec![
-                PanelSpec { name: "header".into(),    position: Top,    height: Some(3), width_pct: None },
+                PanelSpec { name: "header".into(),    position: Top,    height: Some(5), width_pct: None },
                 PanelSpec { name: "spectrum".into(),  position: Body,   height: None,    width_pct: None },
                 PanelSpec { name: "waterfall".into(), position: Body,   height: None,    width_pct: None },
                 PanelSpec { name: "log".into(),       position: Bottom, height: Some(5), width_pct: None },
@@ -230,7 +230,7 @@ impl LayoutConfig {
         };
         let lab = PresetConfig {
             panels: vec![
-                PanelSpec { name: "header".into(),           position: Top,    height: Some(3), width_pct: None     },
+                PanelSpec { name: "header".into(),           position: Top,    height: Some(5), width_pct: None     },
                 PanelSpec { name: "rf_chain".into(),         position: Left,   height: None,    width_pct: Some(50) },
                 PanelSpec { name: "iq_diagnostics".into(),   position: Left,   height: None,    width_pct: Some(50) },
                 PanelSpec { name: "signal_metrics".into(),   position: Right,  height: None,    width_pct: Some(50) },
@@ -243,7 +243,7 @@ impl LayoutConfig {
         };
         let observer = PresetConfig {
             panels: vec![
-                PanelSpec { name: "header".into(),           position: Top,    height: Some(3), width_pct: None     },
+                PanelSpec { name: "header".into(),           position: Top,    height: Some(5), width_pct: None     },
                 PanelSpec { name: "observer".into(),         position: Left,   height: None,    width_pct: Some(60) },
                 PanelSpec { name: "system_resources".into(), position: Right,  height: None,    width_pct: Some(40) },
                 PanelSpec { name: "log".into(),              position: Bottom, height: Some(5), width_pct: None     },
