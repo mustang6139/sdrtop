@@ -59,10 +59,18 @@ impl Panel for WaterfallPanel {
         let inner = block.inner(area);
         f.render_widget(block, area);
 
-        let rows_to_show = inner.height as usize;
-        let cols = inner.width as usize;
+        // Offset matches spectrum panel's dB-label column so both panels share the same x-axis
+        const DB_COL: u16 = 6;
+        let wf_area = Rect {
+            x: inner.x + DB_COL,
+            y: inner.y,
+            width: inner.width.saturating_sub(DB_COL),
+            height: inner.height,
+        };
+        let cols = wf_area.width as usize;
         if cols == 0 { return; }
 
+        let rows_to_show = wf_area.height as usize;
         let depth = ColorDepth::detect();
         let mut lines: Vec<Line> = Vec::with_capacity(rows_to_show);
 
@@ -82,6 +90,29 @@ impl Panel for WaterfallPanel {
             lines.push(Line::from(spans));
         }
 
-        f.render_widget(Paragraph::new(lines), inner);
+        f.render_widget(Paragraph::new(lines), wf_area);
+
+        // dBFS color scale legend in the left column
+        let legend_area = Rect { x: inner.x, y: inner.y, width: DB_COL, height: inner.height };
+        let h = legend_area.height as usize;
+        if h > 0 {
+            let mut legend: Vec<Line> = Vec::with_capacity(h);
+            for row in 0..h {
+                let t = row as f32 / (h.saturating_sub(1)).max(1) as f32;
+                let db = DB_MAX + (DB_MIN - DB_MAX) * t;
+                let bar_color = magnitude_to_color_themed(db, DB_MIN, DB_MAX, depth, theme);
+                let label = match row {
+                    0 => format!("{:>+4} ", DB_MAX as i32),
+                    r if r == h / 2 => format!("{:>+4} ", ((DB_MAX + DB_MIN) / 2.0) as i32),
+                    r if r == h.saturating_sub(1) => format!("{:>+4} ", DB_MIN as i32),
+                    _ => "     ".to_string(),
+                };
+                legend.push(Line::from(vec![
+                    Span::styled("█", Style::default().fg(bar_color)),
+                    Span::styled(label, Style::default().fg(theme.label)),
+                ]));
+            }
+            f.render_widget(Paragraph::new(legend), legend_area);
+        }
     }
 }
