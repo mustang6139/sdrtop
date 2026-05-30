@@ -94,10 +94,6 @@ pub struct GainsPanel;
 impl Panel for GainsPanel {
     fn name(&self) -> &'static str { "gains" }
     fn min_size(&self) -> (u16, u16) { (20, 12) }
-    fn focus_key(&self) -> Option<char> { Some('g') }
-    fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
-        &[("↑/↓", "LNA gain"), ("[/]", "VGA gain"), ("A", "AMP toggle"), ("Esc", "Exit focus")]
-    }
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         render(f, area, state, theme, focused);
     }

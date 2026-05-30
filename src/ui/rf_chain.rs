@@ -23,12 +23,7 @@ fn fmt_hz(hz: u32) -> String {
 
 impl Panel for RfChainPanel {
     fn name(&self) -> &'static str { "rf_chain" }
-    fn min_size(&self) -> (u16, u16) { (32, 11) }
-
-    fn focus_key(&self) -> Option<char> { Some('c') }
-    fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
-        &[("Esc", "Exit focus")]
-    }
+    fn min_size(&self) -> (u16, u16) { (32, 12) }
 
     fn render(&self, f: &mut Frame, area: ratatui::layout::Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         let border_color = if focused { theme.border_focused } else { theme.border_default };
@@ -91,6 +86,10 @@ impl Panel for RfChainPanel {
             Line::from(vec![
                 Span::styled(format!("{:<12}", "Board"), lbl),
                 Span::styled(Device::board_rev_name(state.board_rev), val),
+            ]),
+            Line::from(vec![
+                Span::styled(format!("{:<12}", "Firmware"), lbl),
+                Span::styled(state.fw_version.clone(), val),
             ]),
             Line::from(vec![
                 Span::styled(format!("{:<12}", "USB API"), lbl),

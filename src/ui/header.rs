@@ -11,20 +11,21 @@ use super::panel::Panel;
 
 pub struct HeaderPanel;
 
-/// Returns (filled_chars, empty_chars). Both strings use block elements;
-/// their char counts always sum to `width`.
-fn gain_bar(gain: u32, max_gain: u32, width: usize) -> (String, String) {
-    let filled = ((gain as f32 / max_gain as f32) * width as f32).round() as usize;
-    let filled = filled.min(width);
-    ("█".repeat(filled), "░".repeat(width - filled))
+/// Returns (filled_str, empty_str). Each string is exactly `n` terminal columns.
+/// Uses ▐ (RIGHT HALF BLOCK): each char fills the right half of its cell; the left half
+/// shows the panel background, producing a thin gap between every adjacent segment.
+fn gain_bar(gain: u32, max_gain: u32, n: usize) -> (String, String) {
+    let filled = ((gain as f32 / max_gain as f32) * n as f32).round() as usize;
+    let filled = filled.min(n);
+    ("▐".repeat(filled), "▐".repeat(n - filled))
 }
 
 /// Returns the number of space characters needed between the fw-version field
 /// and the right-aligned "AMP … USB …" section in the top band.
 /// All length arguments are in terminal columns (chars, not bytes).
 fn top_band_gap(board_name_len: usize, badge_len: usize, fw_value_len: usize, inner_width: u16) -> usize {
-    // left side: " " + " DeviceName " + "  " + " BADGE " + "  " + "fw " + fw_val
-    let left = 1 + (2 + board_name_len) + 2 + badge_len + 2 + 3 + fw_value_len;
+    // left side: " " + " DeviceName " + "  " + " BADGE " + "  " + "hackrf fw " + fw_val
+    let left = 1 + (2 + board_name_len) + 2 + badge_len + 2 + 10 + fw_value_len;
     // right side: "AMP XXX  ·  USB XXXXXXXXX  " = 4+3+5+4+9+2 = 27 chars
     let right = 27usize;
     (inner_width as usize).saturating_sub(left + right)
@@ -43,11 +44,18 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
     };
     let badge_len = badge_text.chars().count();
 
-    // --- Firmware version ---
-    let fw_val: String = if state.observer_mode {
-        "—".to_string()
+    // --- Firmware version + label ---
+    // Mayhem nightly: "n_XXXXXX"; Mayhem release: "vX.Y.Z" → label as "mayhem fw "
+    // Standard HackRF firmware ("2024.02.1", "git-...") → label as "hackrf fw "
+    // Both labels are exactly 10 chars so top_band_gap stays valid.
+    let (fw_val, fw_label): (String, &str) = if state.observer_mode {
+        ("—".to_string(), "hackrf fw ")
     } else {
-        state.fw_version.clone()
+        let is_mayhem = state.fw_version.starts_with("n_")
+            || (state.fw_version.starts_with('v')
+                && state.fw_version.chars().nth(1).map_or(false, |c| c.is_ascii_digit()));
+        let label = if is_mayhem { "mayhem fw " } else { "hackrf fw " };
+        (state.fw_version.clone(), label)
     };
     let fw_color = if state.observer_mode { theme.label } else { theme.value };
     let fw_len = fw_val.chars().count();
@@ -88,7 +96,7 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
             Style::default().fg(badge_fg).bg(badge_bg).add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
-        Span::styled("fw ", Style::default().fg(theme.label)),
+        Span::styled(fw_label.to_string(), Style::default().fg(theme.label)),
         Span::styled(fw_val, Style::default().fg(fw_color)),
         Span::raw(" ".repeat(gap)),
         Span::styled("AMP ", Style::default().fg(theme.label)),
@@ -186,6 +194,7 @@ impl Panel for HeaderPanel {
         //   inner.y + 1 → separator (rendered at outer width to overwrite the │ border chars)
         //   inner.y + 2 → bottom band
 
+        if inner.height < 3 { return; }
         let top_area = Rect { x: inner.x, y: inner.y,     width: inner.width, height: 1 };
         let sep_area = Rect { x: area.x,  y: inner.y + 1, width: area.width,  height: 1 };
         let bot_area = Rect { x: inner.x, y: inner.y + 2, width: inner.width, height: 1 };
@@ -204,20 +213,19 @@ mod tests {
     fn gain_bar_zero_gain_all_empty() {
         let (filled, empty) = gain_bar(0, 40, 8);
         assert_eq!(filled, "");
-        assert_eq!(empty, "░░░░░░░░");
+        assert_eq!(empty, "▐▐▐▐▐▐▐▐");
     }
 
     #[test]
     fn gain_bar_full_gain_all_filled() {
         let (filled, empty) = gain_bar(40, 40, 8);
-        assert_eq!(filled, "████████");
+        assert_eq!(filled, "▐▐▐▐▐▐▐▐");
         assert_eq!(empty, "");
     }
 
     #[test]
     fn gain_bar_half_gain() {
         let (filled, empty) = gain_bar(20, 40, 8);
-        // 20/40 = 50% → 4 chars
         assert_eq!(filled.chars().count(), 4);
         assert_eq!(empty.chars().count(), 4);
     }
@@ -234,18 +242,19 @@ mod tests {
     #[test]
     fn top_band_gap_rx_state() {
         // HackRF One (len=10), badge " ● RX " (len=6), fw "2024.02.1" (len=9), inner=78
-        assert_eq!(top_band_gap(10, 6, 9, 78), 16);
+        // label "hackrf fw " = 10 chars
+        assert_eq!(top_band_gap(10, 6, 9, 78), 9);
     }
 
     #[test]
     fn top_band_gap_idle_state() {
         // badge " ○ IDLE " is 2 chars wider than RX → gap shrinks by 2
-        assert_eq!(top_band_gap(10, 8, 9, 78), 14);
+        assert_eq!(top_band_gap(10, 8, 9, 78), 7);
     }
 
     #[test]
     fn top_band_gap_observer_state() {
         // badge " ◈ OBSERVER " (len=12), fw "—" (len=1)
-        assert_eq!(top_band_gap(10, 12, 1, 78), 18);
+        assert_eq!(top_band_gap(10, 12, 1, 78), 11);
     }
 }

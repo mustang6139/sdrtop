@@ -18,19 +18,16 @@ pub fn render_help(f: &mut Frame) {
  [S]        Enter sample rate (2–20 MHz)\n\
  [R]        Reset all to defaults\n\
  [P]        Cycle presets\n\
- [1]        Preset: minimal\n\
- [2]        Preset: monitoring\n\
- [3]        Preset: spectrum\n\
- [4]        Preset: waterfall\n\
- [5]        Preset: spectrum+waterfall\n\
+ [1]        Preset: main\n\
+ [2]        Preset: spectrum\n\
+ [3]        Preset: waterfall\n\
+ [4]        Preset: spectrum+waterfall\n\
+ [5]        Preset: monitoring\n\
  [6]        Preset: lab\n\
  [W]        Pause / resume waterfall\n\
+ [E]        Focus spectrum panel (expand / zoom)\n\
+   Esc      Exit spectrum focus\n\
  [?]        Toggle this help\n\
-\n\
- Panel focus:\n\
-   [E] Spectrum  [O] Waterfall  [H] Hardware Health\n\
-   [C] RF Chain  [M] Signal     [I] IQ Diag  [G] Gains\n\
-   Esc  Exit focus mode\n\
 \n\
  --theme <name>:  sdr | nord | dracula | gruvbox | catppuccin | solarized\n\
 \n\

@@ -14,6 +14,8 @@ Not bugs, not roadmap items — just polish, missing features, and practical gap
 | [IMP-001](imp-001-sample-rate-control.md) | Interactive sample rate control (`[S]` key) | 11→12 | 2026-05-28 | ✅ Done |
 | [IMP-002](imp-002-observer-mode.md) · [log](imp-002-observer-mode-log.md) | Observer mode — monitor while another app holds the HackRF | 11→12 | 2026-05-28 | ✅ Done (alpha) |
 | [IMP-003](imp-003-spectrum-waterfall-ui-fixes.md) | Spectrum & waterfall UI fixes (border, freq labels, axis alignment, dBFS legend) | 12→13 | 2026-05-29 | ✅ Done |
+| [IMP-004](imp-004-spectrum-display-overhaul.md) | Spectrum display overhaul — fixed y-range, filled columns, focus key highlight, preset reorder | 12→13 | 2026-05-30 | ✅ Done |
+| [IMP-005](imp-005-spectrum-focus-tuning.md) | Spectrum focus tuning — ←→ frequency navigation, step control, tuning indicator | 12→13 | 2026-05-30 | ✅ Done |
 
 ---
 

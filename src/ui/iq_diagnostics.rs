@@ -27,15 +27,14 @@ impl Panel for IqDiagnosticsPanel {
     fn name(&self) -> &'static str { "iq_diagnostics" }
     fn min_size(&self) -> (u16, u16) { (30, 6) }
 
-    fn focus_key(&self) -> Option<char> { Some('i') }
-    fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
-        &[("Esc", "Exit focus")]
-    }
-
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
-        let border_color = if focused { theme.border_focused } else { theme.border_default };
+        let stale = !state.hw_streaming && !state.observer_mode;
+        let title = if stale { " IQ Diagnostics [STALE] " } else { " IQ Diagnostics " };
+        let border_color = if focused { theme.border_focused }
+            else if stale { theme.stale }
+            else { theme.border_default };
         let block = Block::default()
-            .title(" IQ Diagnostics ")
+            .title(title)
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border_color));
@@ -51,6 +50,18 @@ impl Panel for IqDiagnosticsPanel {
                 Constraint::Min(0),
             ])
             .split(inner);
+
+        if stale {
+            f.render_widget(
+                Paragraph::new(Span::styled("---", Style::default().fg(theme.label))),
+                rows[0],
+            );
+            f.render_widget(
+                Paragraph::new(Span::styled("---", Style::default().fg(theme.label))),
+                rows[1],
+            );
+            return;
+        }
 
         let max_offset = state.dc_offset_i.abs().max(state.dc_offset_q.abs());
         f.render_widget(

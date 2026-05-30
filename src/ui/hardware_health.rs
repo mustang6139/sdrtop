@@ -21,11 +21,6 @@ impl Panel for HardwareHealthPanel {
     fn name(&self) -> &'static str { "hardware_health" }
     fn min_size(&self) -> (u16, u16) { (30, 12) }
 
-    fn focus_key(&self) -> Option<char> { Some('h') }
-    fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
-        &[("Esc", "Exit focus")]
-    }
-
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         let border_color = if focused { theme.border_focused } else { theme.border_default };
         let block = Block::default()

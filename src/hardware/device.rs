@@ -90,20 +90,17 @@ fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
             m.acc_saturated    += saturated;
             m.acc_i_sum        += i_sum;
             m.acc_q_sum        += q_sum;
-            m.acc_i_sq_sum     += i_sq;
-            m.acc_q_sq_sum     += q_sq;
+            m.acc_i_sq_sum     += i_sq as u64;
+            m.acc_q_sq_sum     += q_sq as u64;
             m.acc_sample_count += pairs;
 
-            let now_us = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_micros() as u64)
-                .unwrap_or(0);
-            if let Some(last_us) = m.acc_last_callback_us {
-                let gap = now_us.saturating_sub(last_us);
-                m.acc_jitter_sum_us += gap;
+            let now = std::time::Instant::now();
+            if let Some(last) = m.acc_last_callback_us {
+                let gap_us = now.duration_since(last).as_micros() as u64;
+                m.acc_jitter_sum_us += gap_us;
                 m.acc_jitter_count  += 1;
             }
-            m.acc_last_callback_us = Some(now_us);
+            m.acc_last_callback_us = Some(now);
         }
         // Lock released — allocate outside the critical section
         ctx.sample_tx.try_send(buf.to_vec()).ok();

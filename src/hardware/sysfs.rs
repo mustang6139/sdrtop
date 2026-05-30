@@ -71,7 +71,8 @@ pub fn find_owner(bus: u32, dev: u32) -> Option<OwnerInfo> {
         .and_then(|s| s.split_whitespace().next().and_then(|v| v.parse::<f64>().ok()))
         .unwrap_or(0.0) as u64;
 
-    let ticks_per_sec = unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as u64;
+    let ticks_raw = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
+    let ticks_per_sec: u64 = if ticks_raw > 0 { ticks_raw as u64 } else { 100 };
 
     for entry in fs::read_dir("/proc").ok()?.flatten() {
         let pid_str = entry.file_name();

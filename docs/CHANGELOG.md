@@ -7,6 +7,45 @@ Full details are in the linked phase logs and improvement files.
 
 ---
 
+## 2026-05-30
+
+### BUG-005 — Phase 12 multi-bug audit (9 fixes)
+→ [details](bugs/bug-005-multi-bug-audit.md)
+
+- **Monotonic jitter clock:** `SystemTime` → `std::time::Instant` in rx_callback; acc fields `i_sq_sum`/`q_sq_sum` changed `i64` → `u64`
+- **WaterfallBuffer OOM:** early return when `max_rows == 0`
+- **sysconf() -1:** guarded `_SC_CLK_TCK` error sentinel before cast to `u64`
+- **Reset on hardware failure:** `reset_to_defaults()` now only called when all `set_*()` calls succeed
+- **Header height guard:** `if inner.height < 3 { return; }` prevents rendering outside panel bounds
+- **SNR stale guard:** `signal_metrics` shows `"---"` before first FFT frame instead of `0.0 dB [CRIT]`
+- **IQ diagnostics stale:** added `[STALE]` title + `"---"` rows when not streaming
+- **Spectrum x_bounds off-by-one:** `[0.0, n]` → `[0.0, n - 1.0]`; noise floor line corrected
+- **Waterfall legend arm ordering:** bottom (`-120 dBFS`) arm checked before middle to fix shadowing at small heights
+
+### BUG-006 — Spectrum dBFS scale + waterfall stale
+→ [details](bugs/bug-006-spectrum-scale-waterfall-stale.md)
+
+- **dBFS scale misaligned:** replaced `\n`-separated labels with `Vec<Line>` positioned at `(DB_MAX - db) / range * h` rows; labels now align with canvas at any terminal height
+- **Waterfall stale:** added `last_fft_frame` timestamp check; waterfall dims and shows `[STALE]` in sync with spectrum when RX stops
+
+### IMP-004 — Spectrum display overhaul
+→ [details](improvements/imp-004-spectrum-display-overhaul.md)
+
+- **Fixed y-range:** removed per-frame dynamic zoom; canvas always spans `DB_MIN…DB_MAX`; no more bounce
+- **Filled columns:** per-bin vertical `CanvasLine` from bottom + outline polyline on top; spectrum grounded to panel bottom
+- **Focus key highlight:** `e` in `Spectrum` title rendered in `value_hi + BOLD`; focus shortcut self-documenting
+- **Focus system simplified:** removed `focus_key()` from all panels except spectrum; 6 unused bindings gone
+- **Preset reorder:** `2`=spectrum · `3`=waterfall · `4`=spectrum+waterfall · `5`=monitoring · `6`=lab
+
+### IMP-005 — Spectrum focus tuning
+→ [details](improvements/imp-005-spectrum-focus-tuning.md)
+
+- **Frequency navigation:** `←`/`→` tunes center frequency by step when spectrum is focused
+- **Step control:** `[`/`]` cycles through 9 step presets (1 kHz → 10 MHz) in focus mode, overriding global VGA keys
+- **Tuning indicator:** `────◀  92.800 MHz  ▶────  step 100 kHz  [/]` appears as one row at canvas bottom in focus mode; absent otherwise
+
+---
+
 ## 2026-05-29
 
 ### IMP-003 — Spectrum & Waterfall UI Fixes

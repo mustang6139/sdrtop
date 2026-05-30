@@ -1,7 +1,7 @@
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::Style,
-    text::Span,
+    style::{Modifier, Style},
+    text::{Line, Span},
     widgets::{
         canvas::{Canvas, Line as CanvasLine, Points},
         Block, BorderType, Borders, Paragraph,
@@ -9,6 +9,7 @@ use ratatui::{
     Frame,
 };
 
+use crate::app::fmt_spectrum_step;
 use crate::palette::{magnitude_to_color_themed, ColorDepth};
 use crate::state::SdrMetrics;
 use crate::ui::panel::Panel;
@@ -23,7 +24,11 @@ impl Panel for SpectrumPanel {
     fn min_size(&self) -> (u16, u16) { (40, 10) }
     fn focus_key(&self) -> Option<char> { Some('e') }
     fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
-        &[("Esc", "Exit focus")]
+        &[
+            ("← →", "Tune frequency"),
+            ("[ ]", "Step size"),
+            ("Esc",  "Exit focus"),
+        ]
     }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
@@ -31,10 +36,18 @@ impl Panel for SpectrumPanel {
             fr.timestamp.elapsed() > std::time::Duration::from_millis(500)
         }).unwrap_or(false);
 
-        let title = if stale { " Spectrum [STALE] " } else { " Spectrum " };
         let border_color = if focused { theme.border_focused }
             else if stale { theme.stale }
             else { theme.border_accent };
+
+        // Title: 'e' in "Spectrum" is highlighted as the focus key indicator
+        let key_style = Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD);
+        let suffix = if stale { "ctrum [STALE] " } else { "ctrum " };
+        let title_line = Line::from(vec![
+            Span::raw(" Sp"),
+            Span::styled("e", key_style),
+            Span::raw(suffix),
+        ]);
 
         match state.last_fft_frame.as_ref() {
             None => {
@@ -42,7 +55,7 @@ impl Panel for SpectrumPanel {
                     Paragraph::new("Waiting for RX\u{2026}")
                         .block(
                             Block::default()
-                                .title(title)
+                                .title(title_line)
                                 .borders(Borders::ALL)
                                 .border_type(BorderType::Rounded)
                                 .border_style(Style::default().fg(border_color)),
@@ -55,7 +68,7 @@ impl Panel for SpectrumPanel {
             Some(frame) => {
                 // Single outer block provides all borders + title
                 let outer_block = Block::default()
-                    .title(Span::styled(title, Style::default()))
+                    .title(title_line)
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
                     .border_style(Style::default().fg(border_color));
@@ -68,34 +81,29 @@ impl Panel for SpectrumPanel {
                     .constraints([Constraint::Length(6), Constraint::Min(1)])
                     .split(inner);
 
-                // Vertical split for right column: canvas above, freq axis below
-                let rows = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([Constraint::Min(4), Constraint::Length(1)])
-                    .split(cols[1]);
+                // Vertical split: canvas + freq axis + optional tuning indicator (focus only)
+                let v_constraints: Vec<Constraint> = if focused {
+                    vec![Constraint::Min(4), Constraint::Length(1), Constraint::Length(1)]
+                } else {
+                    vec![Constraint::Min(4), Constraint::Length(1)]
+                };
+                let rows    = Layout::default().direction(Direction::Vertical)
+                    .constraints(v_constraints.clone()).split(cols[1]);
+                let db_rows = Layout::default().direction(Direction::Vertical)
+                    .constraints(v_constraints).split(cols[0]);
 
-                // Mirror the same vertical split on the db column so labels align with canvas
-                let db_rows = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([Constraint::Min(4), Constraint::Length(1)])
-                    .split(cols[0]);
-
-                let canvas_area = rows[0];
-                let freq_area   = rows[1];
+                let canvas_area    = rows[0];
+                let freq_area      = rows[1];
+                let indicator_area = if focused { rows.get(2).copied() } else { None };
 
                 let n = frame.bins_dbfs.len() as f64;
 
-                // Dynamic y-range: 15 dB headroom above signal peak, 50 dB below peak.
-                // This auto-zooms so signals fill the canvas rather than hugging the bottom.
-                let sig_peak = frame.bins_dbfs.iter()
-                    .cloned()
-                    .filter(|v| v.is_finite())
-                    .fold(DB_MIN, f32::max)
-                    .clamp(DB_MIN, DB_MAX);
-                let y_max_f = (sig_peak + 15.0).min(DB_MAX);
-                let y_min_f = (sig_peak - 50.0).max(DB_MIN);
-                let y_max = y_max_f as f64;
-                let y_min = y_min_f as f64;
+                // Fixed y range — anchors the spectrum to a stable absolute dBFS scale.
+                // Dynamic zoom caused per-frame y-bound changes that made the line bounce.
+                let y_min_f = DB_MIN;
+                let y_max_f = DB_MAX;
+                let y_min = DB_MIN as f64;
+                let y_max = DB_MAX as f64;
 
                 // Precompute per-bin colors outside the Canvas closure (avoids lifetime issue).
                 // Colors map to the visible range so the spectrum line uses the full palette.
@@ -113,10 +121,20 @@ impl Panel for SpectrumPanel {
                 // Spectrum canvas — outer block handles all borders
                 f.render_widget(
                     Canvas::default()
-                        .x_bounds([0.0, n])
+                        .x_bounds([0.0, n - 1.0])
                         .y_bounds([y_min, y_max])
                         .paint(move |ctx| {
-                            // Spectrum outline: polyline connecting adjacent bin tops
+                            // Filled columns: vertical line per bin from DB_MIN up to bin level.
+                            // This anchors the spectrum to the panel bottom on a fixed dBFS scale.
+                            for i in 0..bins.len() {
+                                let y_top = bins[i].clamp(y_min_f, y_max_f) as f64;
+                                ctx.draw(&CanvasLine {
+                                    x1: i as f64, y1: y_min,
+                                    x2: i as f64, y2: y_top,
+                                    color: bin_colors[i],
+                                });
+                            }
+                            // Outline on top of the fill for a clean signal edge
                             for i in 1..bins.len() {
                                 let y0 = bins[i - 1].clamp(y_min_f, y_max_f) as f64;
                                 let y1 = bins[i].clamp(y_min_f, y_max_f) as f64;
@@ -137,8 +155,8 @@ impl Panel for SpectrumPanel {
                             // Noise floor
                             let nf = noise_floor.clamp(y_min_f, y_max_f) as f64;
                             ctx.draw(&CanvasLine {
-                                x1: 0.0, y1: nf,
-                                x2: n,   y2: nf,
+                                x1: 0.0,       y1: nf,
+                                x2: n - 1.0,   y2: nf,
                                 color: noise_floor_color,
                             });
                         }),
@@ -165,23 +183,53 @@ impl Panel for SpectrumPanel {
                     freq_area,
                 );
 
-                // dBFS labels — dynamic range, right-border as divider
-                let db_text: String = (0..=4)
-                    .map(|i| {
-                        let db = y_max_f - (y_max_f - y_min_f) * i as f32 / 4.0;
-                        format!("{:+4.0}\n", db)
-                    })
-                    .collect();
-                f.render_widget(
-                    Paragraph::new(db_text)
-                        .block(
+                // Tuning indicator — shown only in spectrum focus mode
+                if let Some(ind_area) = indicator_area {
+                    let step_str = fmt_spectrum_step(state.spectrum_step_hz);
+                    let freq_str = format!("  {:.3} MHz  ", state.frequency as f64 / 1_000_000.0);
+                    let right_info = format!("  step {}  [/]", step_str);
+                    let fixed = 1 + 1 + freq_str.len() + 1 + 1 + right_info.len(); // ◀ + freq + ▶ + info
+                    let arm = (ind_area.width as usize).saturating_sub(fixed) / 2;
+                    let line = Line::from(vec![
+                        Span::styled("─".repeat(arm), Style::default().fg(theme.border_dim)),
+                        Span::styled("◀", Style::default().fg(theme.border_accent).add_modifier(Modifier::BOLD)),
+                        Span::styled(freq_str, Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD)),
+                        Span::styled("▶", Style::default().fg(theme.border_accent).add_modifier(Modifier::BOLD)),
+                        Span::styled("─".repeat(arm), Style::default().fg(theme.border_dim)),
+                        Span::styled(right_info, Style::default().fg(theme.label)),
+                    ]);
+                    f.render_widget(Paragraph::new(line), ind_area);
+                }
+
+                // dBFS axis labels — each label placed at the character row that corresponds
+                // to its dB value in the canvas, so they stay aligned on any terminal height.
+                // Label column is 6 chars wide; Borders::RIGHT takes 1 → 5 chars for text.
+                let h = db_rows[0].height as usize;
+                if h > 0 {
+                    const DB_MARKERS: &[(f32, &str)] = &[
+                        (   0.0, "   0"),
+                        ( -30.0, " -30"),
+                        ( -60.0, " -60"),
+                        ( -90.0, " -90"),
+                        (-120.0, "-120"),
+                    ];
+                    let mut label_lines: Vec<Line> = vec![Line::raw(""); h];
+                    for &(db, text) in DB_MARKERS {
+                        let frac = (DB_MAX - db) / (DB_MAX - DB_MIN);
+                        let row = (frac * h.saturating_sub(1) as f32).round() as usize;
+                        label_lines[row.min(h - 1)] = Line::from(
+                            Span::styled(text, Style::default().fg(theme.value))
+                        );
+                    }
+                    f.render_widget(
+                        Paragraph::new(label_lines).block(
                             Block::default()
                                 .borders(Borders::RIGHT)
-                                .border_style(Style::default().fg(border_color)),
-                        )
-                        .style(Style::default().fg(theme.value)),
-                    db_rows[0],
-                );
+                                .border_style(Style::default().fg(border_color))
+                        ),
+                        db_rows[0],
+                    );
+                }
             }
         }
     }

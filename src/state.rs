@@ -13,7 +13,7 @@ impl WaterfallBuffer {
     }
 
     pub fn push(&mut self, bins: Vec<f32>) {
-        if self.paused { return; }
+        if self.paused || self.max_rows == 0 { return; }
         if self.rows.len() >= self.max_rows {
             self.rows.pop_back();
         }
@@ -133,17 +133,20 @@ pub struct SdrMetrics {
     pub focused_panel: Option<String>,
     pub focused_panel_bindings: &'static [(&'static str, &'static str)],
 
+    // --- Spectrum focus tuning ---
+    pub spectrum_step_hz: u64,
+
     // --- Accumulators (written by rx_callback, reset by polling task) ---
     pub acc_drops: u64,
     pub acc_saturated: u64,
     pub acc_i_sum: i64,
     pub acc_q_sum: i64,
-    pub acc_i_sq_sum: i64,
-    pub acc_q_sq_sum: i64,
+    pub acc_i_sq_sum: u64,
+    pub acc_q_sq_sum: u64,
     pub acc_sample_count: u64,
     pub acc_jitter_sum_us: u64,
     pub acc_jitter_count: u64,
-    pub acc_last_callback_us: Option<u64>,
+    pub acc_last_callback_us: Option<std::time::Instant>,
     pub acc_iq_hist: [u64; 32],
 }
 

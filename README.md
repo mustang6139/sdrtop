@@ -1,15 +1,15 @@
 # sdrtop
 
-**A terminal monitor for SDR hardware — built to squeeze every piece of diagnostic data out of your radio and put it on screen, live.**
-
-sdrtop is a real-time diagnostic surface built for the terminal. It works equally well on a cyberdeck out in the field as it does in a tmux pane over SSH...
-
 [![Rust](https://img.shields.io/badge/rust-stable-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-linux-lightgrey?logo=linux&logoColor=white)]()
-[![HackRF One](https://img.shields.io/badge/hardware-HackRF%20One-brightgreen)]()
-[![PortaPack](https://img.shields.io/badge/hardware-PortaPack%20H4M-blueviolet)]()
+[![HackRF One|138](https://img.shields.io/badge/hardware-HackRF%20One-brightgreen)](https://greatscottgadgets.com/hackrf/one/)
+[![PortaPack](https://img.shields.io/badge/hardware-PortaPack%20H4M-blueviolet)](https://github.com/portapack-mayhem/mayhem-firmware)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-support%20the%20project-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/mustang6139)
+
+**A terminal monitor for SDR hardware — built to squeeze every piece of diagnostic data out of your radio and put it on screen, live.**
+
+sdrtop is a real-time diagnostic surface built for the terminal. It works equally well on a cyberdeck out in the field as it does in a tmux pane over SSH...
 
 I built this because I needed a real-time diagnostic surface that fits into a minimal terminal workflow. Whether you are running it on a rugged cyberdeck in the field or tucked into a tmux session over SSH, **sdrtop** gives you actual insights into your hardware.
 
@@ -191,7 +191,3 @@ No pressure, but if this scratches an itch for you, this is where it goes.
 Phase 11 complete · Phase 12 in progress. Running on real hardware. Next: finish UI polish, then hardware abstraction layer.
 
 → [Roadmap](docs/Roadmap.md) · [Changelog](docs/CHANGELOG.md) · [Docs](docs/Home.md)
-
----
-
-*Written by mustang6139 and [Claude](https://claude.ai).*

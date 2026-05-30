@@ -22,16 +22,16 @@ impl WaterfallPanel {
 impl Panel for WaterfallPanel {
     fn name(&self) -> &'static str { "waterfall" }
     fn min_size(&self) -> (u16, u16) { (40, 5) }
-    fn focus_key(&self) -> Option<char> { Some('o') }
-    fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
-        &[("W", "Pause/Resume"), ("Esc", "Exit focus")]
-    }
-
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         let buf = &state.waterfall;
-        let title = if buf.paused { " Waterfall [PAUSED] " } else { " Waterfall " };
+        let stale = state.last_fft_frame.as_ref()
+            .map(|fr| fr.timestamp.elapsed() > std::time::Duration::from_millis(500))
+            .unwrap_or(false);
+        let title = if buf.paused { " Waterfall [PAUSED] " }
+            else if stale { " Waterfall [STALE] " }
+            else { " Waterfall " };
         let border_color = if focused { theme.border_focused }
-            else if buf.paused { theme.stale }
+            else if buf.paused || stale { theme.stale }
             else { theme.border_accent };
 
         if buf.rows.is_empty() {
@@ -103,8 +103,8 @@ impl Panel for WaterfallPanel {
                 let bar_color = magnitude_to_color_themed(db, DB_MIN, DB_MAX, depth, theme);
                 let label = match row {
                     0 => format!("{:>+4} ", DB_MAX as i32),
-                    r if r == h / 2 => format!("{:>+4} ", ((DB_MAX + DB_MIN) / 2.0) as i32),
                     r if r == h.saturating_sub(1) => format!("{:>+4} ", DB_MIN as i32),
+                    r if r == h / 2 => format!("{:>+4} ", ((DB_MAX + DB_MIN) / 2.0) as i32),
                     _ => "     ".to_string(),
                 };
                 legend.push(Line::from(vec![

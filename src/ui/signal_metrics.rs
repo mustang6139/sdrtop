@@ -31,11 +31,6 @@ impl Panel for SignalMetricsPanel {
     fn name(&self) -> &'static str { "signal_metrics" }
     fn min_size(&self) -> (u16, u16) { (32, 6) }
 
-    fn focus_key(&self) -> Option<char> { Some('m') }
-    fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
-        &[("Esc", "Exit focus")]
-    }
-
     fn render(&self, f: &mut Frame, area: ratatui::layout::Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         let stale = state.last_fft_frame.as_ref()
             .map(|fr| fr.timestamp.elapsed().as_millis() > 500)
@@ -64,8 +59,8 @@ impl Panel for SignalMetricsPanel {
             Line::from(vec![
                 Span::styled(format!("{:<15}", "SNR"), lbl),
                 Span::styled(
-                    format!("{:.1} dB", state.snr_db),
-                    Style::default().fg(snr_color(state.snr_db, theme)),
+                    if stale { "---".into() } else { format!("{:.1} dB", state.snr_db) },
+                    Style::default().fg(if stale { theme.label } else { snr_color(state.snr_db, theme) }),
                 ),
             ]),
             Line::from(vec![

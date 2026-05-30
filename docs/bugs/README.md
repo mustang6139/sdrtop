@@ -39,6 +39,8 @@ Each bug has its own detailed file; this document is the index.
 | ID | Title | Date | Status |
 |---|---|---|---|
 | [BUG-004](bug-004-comprehensive-audit.md) | Comprehensive audit — 1 crash-risk fixed, 2 safe concerns documented | 2026-05-28 | ✅ Fixed |
+| [BUG-005](bug-005-multi-bug-audit.md) | Phase 12 multi-bug audit — 9 bugs fixed (jitter clock, OOM, stale UI, off-by-one, reset safety) | 2026-05-30 | ✅ Fixed |
+| [BUG-006](bug-006-spectrum-scale-waterfall-stale.md) | Spectrum dBFS scale misaligned on resize; waterfall not dimming on RX stop | 2026-05-30 | ✅ Fixed |
 
 ---
 

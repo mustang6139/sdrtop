@@ -3,7 +3,7 @@
 > btop-inspired universal SDR terminal monitor, written in Rust.
 
 **Stack:** Rust · ratatui · libhackrf FFI · tokio · rustfft · crossbeam  
-**Progress:** Phase 11 complete · Phase 12 in progress · 4 bugs tracked · 3 improvements logged
+**Progress:** Phase 11 complete · Phase 12 in progress · 6 bugs tracked · 5 improvements logged
 
 ---
 

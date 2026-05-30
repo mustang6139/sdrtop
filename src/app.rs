@@ -18,6 +18,25 @@ use crate::state::{
 };
 use crate::ui;
 
+const SPECTRUM_STEPS: &[u64] = &[
+    1_000, 5_000, 10_000, 25_000, 100_000, 500_000, 1_000_000, 5_000_000, 10_000_000,
+];
+
+fn prev_spectrum_step(current: u64) -> u64 {
+    let idx = SPECTRUM_STEPS.iter().position(|&s| s == current).unwrap_or(4);
+    SPECTRUM_STEPS[idx.saturating_sub(1)]
+}
+
+fn next_spectrum_step(current: u64) -> u64 {
+    let idx = SPECTRUM_STEPS.iter().position(|&s| s == current).unwrap_or(4);
+    SPECTRUM_STEPS[(idx + 1).min(SPECTRUM_STEPS.len() - 1)]
+}
+
+pub fn fmt_spectrum_step(hz: u64) -> String {
+    if hz >= 1_000_000 { format!("{} MHz", hz / 1_000_000) }
+    else { format!("{} kHz", hz / 1_000) }
+}
+
 pub struct App {
     state: Arc<Mutex<SdrMetrics>>,
     device: Option<Arc<hardware::Device>>,
@@ -134,6 +153,8 @@ impl App {
 
             focused_panel: None,
             focused_panel_bindings: &[],
+
+            spectrum_step_hz: 100_000,
 
             acc_drops: 0,
             acc_saturated: 0,
@@ -436,6 +457,8 @@ impl App {
             focused_panel: None,
             focused_panel_bindings: &[],
 
+            spectrum_step_hz: 100_000,
+
             acc_drops: 0,
             acc_saturated: 0,
             acc_i_sum: 0,
@@ -623,10 +646,14 @@ impl App {
                                         device.set_amp_enable(false),
                                     ];
                                     let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
-                                    m.reset_to_defaults();
-                                    for r in results {
-                                        if let Err(e) = r {
-                                            m.push_log(format!("Reset error: {}", e));
+                                    let all_ok = results.iter().all(|r| r.is_ok());
+                                    if all_ok {
+                                        m.reset_to_defaults();
+                                    } else {
+                                        for r in &results {
+                                            if let Err(e) = r {
+                                                m.push_log(format!("Reset error: {}", e));
+                                            }
                                         }
                                     }
                                 }
@@ -653,23 +680,23 @@ impl App {
                             }
                             KeyCode::Char('1') => {
                                 self.engine.set_preset("main");
-                                self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: main (spectrum+waterfall+metrics)");
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: main");
                             }
                             KeyCode::Char('2') => {
-                                self.engine.set_preset("monitoring");
-                                self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: monitoring");
-                            }
-                            KeyCode::Char('3') => {
                                 self.engine.set_preset("spectrum");
                                 self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: spectrum");
                             }
-                            KeyCode::Char('4') => {
+                            KeyCode::Char('3') => {
                                 self.engine.set_preset("waterfall");
                                 self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: waterfall");
                             }
-                            KeyCode::Char('5') => {
+                            KeyCode::Char('4') => {
                                 self.engine.set_preset("spectrum_waterfall");
                                 self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: spectrum+waterfall");
+                            }
+                            KeyCode::Char('5') => {
+                                self.engine.set_preset("monitoring");
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: monitoring");
                             }
                             KeyCode::Char('6') => {
                                 self.engine.set_preset("lab");
@@ -680,6 +707,49 @@ impl App {
                                 m.waterfall.paused = !m.waterfall.paused;
                                 let s = if m.waterfall.paused { "paused" } else { "resumed" };
                                 m.push_log(format!("Waterfall {}", s));
+                            }
+                            // --- Spectrum focus: ← → tune, [ ] step size ---
+                            KeyCode::Left if self.engine.focused_panel_name() == Some("spectrum") => {
+                                if let Some(device) = &self.device {
+                                    let (new_freq, result) = {
+                                        let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                        let new_freq = m.frequency.saturating_sub(m.spectrum_step_hz).max(1_000_000);
+                                        let result = device.set_frequency(new_freq);
+                                        (new_freq, result)
+                                    };
+                                    let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                    match result {
+                                        Ok(()) => m.frequency = new_freq,
+                                        Err(e) => m.push_log(format!("Tune error: {}", e)),
+                                    }
+                                }
+                            }
+                            KeyCode::Right if self.engine.focused_panel_name() == Some("spectrum") => {
+                                if let Some(device) = &self.device {
+                                    let (new_freq, result) = {
+                                        let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                        let new_freq = (m.frequency + m.spectrum_step_hz).min(6_000_000_000);
+                                        let result = device.set_frequency(new_freq);
+                                        (new_freq, result)
+                                    };
+                                    let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                    match result {
+                                        Ok(()) => m.frequency = new_freq,
+                                        Err(e) => m.push_log(format!("Tune error: {}", e)),
+                                    }
+                                }
+                            }
+                            KeyCode::Char('[') if self.engine.focused_panel_name() == Some("spectrum") => {
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                let new_step = prev_spectrum_step(m.spectrum_step_hz);
+                                m.spectrum_step_hz = new_step;
+                                m.push_log(format!("Step → {}", fmt_spectrum_step(new_step)));
+                            }
+                            KeyCode::Char(']') if self.engine.focused_panel_name() == Some("spectrum") => {
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                let new_step = next_spectrum_step(m.spectrum_step_hz);
+                                m.spectrum_step_hz = new_step;
+                                m.push_log(format!("Step → {}", fmt_spectrum_step(new_step)));
                             }
                             KeyCode::Up => {
                                 if let Some(device) = &self.device {
