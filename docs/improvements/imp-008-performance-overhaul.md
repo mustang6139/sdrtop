@@ -102,32 +102,18 @@ let noise_floor = noise_scratch[..count].iter().sum::<f32>() / count as f32;
 
 `select_nth_unstable_by` partitions the slice so the first `count` elements are all ≤ the rest — sufficient for computing the mean without sorting them.
 
-### 5 — Spectrum canvas: bin downsampling
+### 5 — Spectrum canvas: per-bin drawing preserved
 
-The spectrum panel canvas has `x_bounds([0.0, n-1])` where `n = 2048`. Ratatui's Canvas rasterises to `canvas_area.width` terminal columns (≈ 150–300 in practice). Drawing 2048 individual `CanvasLine` fill strokes when only ~200 pixel columns exist was ~10× wasteful.
+An initial attempt at downsampling bins to canvas pixel columns was reverted. Max-pooling per display column caused two visible regressions:
 
-New approach: compute one representative dB value per display column (max-pool) *before* the closure, then draw exactly `draw_n = canvas_area.width.min(n_bins)` lines.
+- **Noise floor appeared higher and more ragged** — max of N noise bins per column is always elevated vs. the visual mean that the original dense rendering produced.
+- **DC spike appeared thicker** — adjacent bins near the HackRF's DC pedestal were pooled into the same column, inflating its apparent width.
 
-```
-draw_n ≈ 200   vs.  n_bins = 2048
-draw calls:  fill 200 + outline 199 + peak 200 = 599   (was ~6 000)
-```
+The original per-bin canvas loops (2048 fill lines + 2047 outline segments) are retained. The canvas rasteriser naturally handles the many-bins-per-pixel mapping, preserving the correct visual density.
 
-`x_bounds` remains `[0.0, n-1]` so cursor and marker x-coordinates (computed as `frac * (n-1)`) are unaffected.
+### 6 — Closure captures: `bin_colors` pre-computed outside the closure
 
-### 6 — Closure captures: `col_data` replaces `bin_colors`
-
-Previously, `bin_colors: Vec<Color>` (2048 entries, ~8 KB) was pre-computed and moved into the canvas closure. The closure also moved the `Arc<Vec<f32>>` bins.
-
-Now, three small arrays are computed outside the closure:
-
-| Array | Entries | Size |
-|---|---|---|
-| `col_data: Vec<(f64, f64, Color)>` | `draw_n` ≈ 200 | ~4 KB |
-| `col_peaks: Vec<(f64, f64)>` | `draw_n` ≈ 200 | ~3.2 KB |
-| `held_data: Option<Vec<(f64, f64)>>` | `draw_n` or `None` | ~3.2 KB |
-
-The closure captures only these small structs plus scalar colours — no `Arc<Vec<f32>>`, no `Theme` reference.
+`bin_colors: Vec<Color>` (2048 entries, ~8 KB) is pre-computed before the canvas closure, as before. The closure captures it by move (heap pointer transfer, O(1)) together with the two `Arc<Vec<f32>>` handles for bins and peaks.
 
 ### 7 — `ColorDepth::detect()` cached
 

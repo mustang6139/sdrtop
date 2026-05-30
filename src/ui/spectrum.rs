@@ -140,9 +140,16 @@ impl Panel for SpectrumPanel {
                 let peaks = Arc::clone(&frame.peak_hold);
                 let noise_floor = frame.noise_floor;
 
+                // Per-bin colors pre-computed outside the closure (closure can't borrow Theme)
+                let bin_colors: Vec<ratatui::style::Color> = bins.iter()
+                    .map(|&db| magnitude_to_color_themed(db, y_min_f, y_max_f, depth, theme))
+                    .collect();
                 let peak_hold_color   = theme.peak_hold;
                 let noise_floor_color = theme.noise_floor;
-                let hold_color        = theme.border_dim;
+
+                // Hold ghost: Arc clone, O(1)
+                let held_bins = state.spectrum_hold.clone();
+                let hold_color = theme.border_dim;
 
                 // Cursor: canvas x-coordinate (0..n-1)
                 let cursor_x_canvas = state.spectrum_cursor_freq.and_then(|cf| {
@@ -171,39 +178,6 @@ impl Panel for SpectrumPanel {
                 let cursor_freq_mhz = state.spectrum_cursor_freq
                     .map(|f| f as f64 / 1_000_000.0);
 
-                // Downsample to canvas pixel columns — reduces draw calls ~10×.
-                // x_bounds stay [0, n-1] so cursor/marker x positions are unaffected.
-                let draw_n = (canvas_area.width as usize).min(n_bins).max(1);
-
-                // Pre-compute per-column (canvas_x, clamped_y, color) outside the closure
-                // so the closure captures no bins Arc and no Theme reference.
-                // draw_n ≈ 200 entries vs 2048 bins — ~10× smaller than the old bin_colors Vec.
-                let col_data: Vec<(f64, f64, ratatui::style::Color)> = (0..draw_n)
-                    .map(|col| {
-                        let lo = col * n_bins / draw_n;
-                        let hi = ((col + 1) * n_bins / draw_n).max(lo + 1).min(n_bins);
-                        let db = bins[lo..hi].iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-                        (lo as f64, db.clamp(y_min_f, y_max_f) as f64,
-                         magnitude_to_color_themed(db, y_min_f, y_max_f, depth, theme))
-                    })
-                    .collect();
-
-                let col_peaks: Vec<(f64, f64)> = (0..draw_n)
-                    .map(|col| {
-                        let lo = col * n_bins / draw_n;
-                        let hi = ((col + 1) * n_bins / draw_n).max(lo + 1).min(n_bins);
-                        let db = peaks[lo..hi].iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-                        (lo as f64, db.clamp(y_min_f, y_max_f) as f64)
-                    })
-                    .collect();
-
-                let held_data: Option<Vec<(f64, f64)>> = state.spectrum_hold.as_ref().map(|held| {
-                    (0..draw_n).map(|col| {
-                        let i = col * n_bins / draw_n;
-                        (i as f64, held[i].clamp(y_min_f, y_max_f) as f64)
-                    }).collect()
-                });
-
                 // ── Canvas ────────────────────────────────────────────────
                 f.render_widget(
                     Canvas::default()
@@ -211,28 +185,40 @@ impl Panel for SpectrumPanel {
                         .y_bounds([y_min, y_max])
                         .paint(move |ctx| {
                             // 1. Hold ghost (behind live signal)
-                            if let Some(ref hd) = held_data {
-                                for i in 1..hd.len() {
+                            if let Some(ref held) = held_bins {
+                                for i in 1..held.len() {
+                                    let y0 = held[i - 1].clamp(y_min_f, y_max_f) as f64;
+                                    let y1 = held[i].clamp(y_min_f, y_max_f) as f64;
                                     ctx.draw(&CanvasLine {
-                                        x1: hd[i - 1].0, y1: hd[i - 1].1,
-                                        x2: hd[i].0,     y2: hd[i].1,
+                                        x1: (i - 1) as f64, y1: y0,
+                                        x2: i as f64,       y2: y1,
                                         color: hold_color,
                                     });
                                 }
                             }
                             // 2. Filled columns
-                            for &(x, y_top, color) in &col_data {
-                                ctx.draw(&CanvasLine { x1: x, y1: y_min, x2: x, y2: y_top, color });
+                            for i in 0..bins.len() {
+                                let y_top = bins[i].clamp(y_min_f, y_max_f) as f64;
+                                ctx.draw(&CanvasLine {
+                                    x1: i as f64, y1: y_min,
+                                    x2: i as f64, y2: y_top,
+                                    color: bin_colors[i],
+                                });
                             }
                             // 3. Outline
-                            for i in 1..col_data.len() {
-                                let (x0, y0, color) = col_data[i - 1];
-                                let (x1, y1, _)     = col_data[i];
-                                ctx.draw(&CanvasLine { x1: x0, y1: y0, x2: x1, y2: y1, color });
+                            for i in 1..bins.len() {
+                                let y0 = bins[i - 1].clamp(y_min_f, y_max_f) as f64;
+                                let y1 = bins[i].clamp(y_min_f, y_max_f) as f64;
+                                ctx.draw(&CanvasLine {
+                                    x1: (i - 1) as f64, y1: y0,
+                                    x2: i as f64,       y2: y1,
+                                    color: bin_colors[i - 1],
+                                });
                             }
                             // 4. Peak hold
-                            for &(x, y) in &col_peaks {
-                                ctx.draw(&Points { coords: &[(x, y)], color: peak_hold_color });
+                            for (i, &db) in peaks.iter().enumerate() {
+                                let y = db.clamp(y_min_f, y_max_f) as f64;
+                                ctx.draw(&Points { coords: &[(i as f64, y)], color: peak_hold_color });
                             }
                             // 5. Noise floor
                             let nf = noise_floor.clamp(y_min_f, y_max_f) as f64;
@@ -315,7 +301,7 @@ impl Panel for SpectrumPanel {
                     let freq_str  = format!("  {:.3} MHz  ", state.frequency as f64 / 1_000_000.0);
 
                     let right_info: String = match (cursor_freq_mhz, cursor_power) {
-                        (Some(cf), Some(pwr)) => format!("  cur: {:.3} MHz  {:.1} dBFS  J/K", cf, pwr),
+                        (Some(cf), Some(pwr)) => format!("  cur: {:.3} MHz  {:.1} dBFS  step {}  J/K", cf, pwr, step_str),
                         _ => format!("  step {}  [/]", step_str),
                     };
 
