@@ -14,8 +14,23 @@ use crate::palette::{magnitude_to_color_themed, ColorDepth};
 use crate::state::SdrMetrics;
 use crate::ui::panel::Panel;
 
-const DB_MIN: f32 = -120.0;
-const DB_MAX: f32 = 0.0;
+// Band plan: (start_hz, end_hz, label)
+const BAND_PLAN: &[(u64, u64, &str)] = &[
+    (87_500_000,    108_000_000,   "FM"),
+    (108_000_000,   118_000_000,   "VOR/ILS"),
+    (118_000_000,   137_000_000,   "AIR"),
+    (144_000_000,   146_000_000,   "2m"),
+    (156_000_000,   174_000_000,   "Marine"),
+    (162_400_000,   163_300_000,   "WX"),
+    (430_000_000,   440_000_000,   "70cm"),
+    (433_050_000,   434_790_000,   "ISM433"),
+    (446_000_000,   446_200_000,   "PMR"),
+    (868_000_000,   869_000_000,   "ISM868"),
+    (1_227_600_000, 1_227_601_000, "GPS-L2"),
+    (1_575_419_000, 1_575_421_000, "GPS-L1"),
+    (1_710_000_000, 2_170_000_000, "CELL"),
+    (2_400_000_000, 2_483_500_000, "2.4G"),
+];
 
 pub struct SpectrumPanel;
 
@@ -27,27 +42,38 @@ impl Panel for SpectrumPanel {
         &[
             ("← →", "Tune frequency"),
             ("[ ]", "Step size"),
+            ("↑ ↓", "Zoom y-axis"),
+            ("J K",  "Cursor"),
+            ("M",    "Place/remove marker"),
+            ("H",    "Hold/unhold frame"),
             ("Esc",  "Exit focus"),
         ]
     }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
-        let stale = state.last_fft_frame.as_ref().map(|fr| {
-            fr.timestamp.elapsed() > std::time::Duration::from_millis(500)
-        }).unwrap_or(false);
+        let stale = state.last_fft_frame.as_ref()
+            .map(|fr| fr.timestamp.elapsed() > std::time::Duration::from_millis(500))
+            .unwrap_or(false);
 
         let border_color = if focused { theme.border_focused }
             else if stale { theme.stale }
             else { theme.border_accent };
 
-        // Title: 'e' in "Spectrum" is highlighted as the focus key indicator
+        // Title: 'e' in "Spectrum" highlighted as focus key indicator
         let key_style = Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD);
-        let suffix = if stale { "ctrum [STALE] " } else { "ctrum " };
-        let title_line = Line::from(vec![
+        let mut title_spans = vec![
             Span::raw(" Sp"),
             Span::styled("e", key_style),
-            Span::raw(suffix),
-        ]);
+            Span::raw("ctrum"),
+        ];
+        if state.spectrum_hold.is_some() {
+            title_spans.push(Span::styled(" [HOLD]", Style::default().fg(theme.status_warn)));
+        }
+        if stale {
+            title_spans.push(Span::raw(" [STALE]"));
+        }
+        title_spans.push(Span::raw(" "));
+        let title_line = Line::from(title_spans);
 
         match state.last_fft_frame.as_ref() {
             None => {
@@ -66,7 +92,6 @@ impl Panel for SpectrumPanel {
                 );
             }
             Some(frame) => {
-                // Single outer block provides all borders + title
                 let outer_block = Block::default()
                     .title(title_line)
                     .borders(Borders::ALL)
@@ -75,13 +100,12 @@ impl Panel for SpectrumPanel {
                 let inner = outer_block.inner(area);
                 f.render_widget(outer_block, area);
 
-                // Horizontal split: dBFS label column (6) + canvas+freq
+                // Layout: dBFS label column (6) | canvas+freq[+indicator]
                 let cols = Layout::default()
                     .direction(Direction::Horizontal)
                     .constraints([Constraint::Length(6), Constraint::Min(1)])
                     .split(inner);
 
-                // Vertical split: canvas + freq axis + optional tuning indicator (focus only)
                 let v_constraints: Vec<Constraint> = if focused {
                     vec![Constraint::Min(4), Constraint::Length(1), Constraint::Length(1)]
                 } else {
@@ -96,36 +120,78 @@ impl Panel for SpectrumPanel {
                 let freq_area      = rows[1];
                 let indicator_area = if focused { rows.get(2).copied() } else { None };
 
-                let n = frame.bins_dbfs.len() as f64;
+                let n          = frame.bins_dbfs.len() as f64;
+                let bw         = frame.sample_rate;
+                let left_hz    = frame.center_freq_hz as f64 - bw / 2.0;
+                let right_hz   = frame.center_freq_hz as f64 + bw / 2.0;
 
-                // Fixed y range — anchors the spectrum to a stable absolute dBFS scale.
-                // Dynamic zoom caused per-frame y-bound changes that made the line bounce.
-                let y_min_f = DB_MIN;
-                let y_max_f = DB_MAX;
-                let y_min = DB_MIN as f64;
-                let y_max = DB_MAX as f64;
+                // Dynamic y-range from state (user-controlled zoom)
+                let y_min_f = state.spectrum_y_min;
+                let y_max_f = state.spectrum_y_max;
+                let y_min   = y_min_f as f64;
+                let y_max   = y_max_f as f64;
 
-                // Precompute per-bin colors outside the Canvas closure (avoids lifetime issue).
-                // Colors map to the visible range so the spectrum line uses the full palette.
                 let depth = ColorDepth::detect();
-                let bins = frame.bins_dbfs.clone();
+                let bins  = frame.bins_dbfs.clone();
                 let peaks = frame.peak_hold.clone();
                 let noise_floor = frame.noise_floor;
 
                 let bin_colors: Vec<ratatui::style::Color> = bins.iter()
                     .map(|&db| magnitude_to_color_themed(db, y_min_f, y_max_f, depth, theme))
                     .collect();
-                let peak_hold_color  = theme.peak_hold;
+                let peak_hold_color   = theme.peak_hold;
                 let noise_floor_color = theme.noise_floor;
 
-                // Spectrum canvas — outer block handles all borders
+                // Hold ghost: dim polyline of frozen frame
+                let held_bins = state.spectrum_hold.clone();
+                let hold_color = theme.border_dim;
+
+                // Cursor: canvas x-coordinate (0..n-1)
+                let cursor_x_canvas = state.spectrum_cursor_freq.and_then(|cf| {
+                    let frac = (cf as f64 - left_hz) / bw;
+                    if (0.0..=1.0).contains(&frac) { Some(frac * (n - 1.0)) } else { None }
+                });
+                let cursor_color = theme.value_hi;
+
+                // Marker canvas x-coordinates
+                let marker_xs: Vec<f64> = state.spectrum_markers.iter()
+                    .filter_map(|mk| {
+                        let frac = (mk.freq_hz as f64 - left_hz) / bw;
+                        if (0.0..=1.0).contains(&frac) { Some(frac * (n - 1.0)) } else { None }
+                    })
+                    .collect();
+                let marker_color = theme.status_warn;
+
+                // Cursor power (read before closure)
+                let cursor_power: Option<f32> = state.spectrum_cursor_freq.and_then(|cf| {
+                    let frac = (cf as f64 - left_hz) / bw;
+                    if (0.0..=1.0).contains(&frac) {
+                        let idx = (frac * (bins.len() - 1) as f64).round() as usize;
+                        Some(bins[idx.min(bins.len() - 1)])
+                    } else { None }
+                });
+                let cursor_freq_mhz = state.spectrum_cursor_freq
+                    .map(|f| f as f64 / 1_000_000.0);
+
+                // ── Canvas ────────────────────────────────────────────────
                 f.render_widget(
                     Canvas::default()
                         .x_bounds([0.0, n - 1.0])
                         .y_bounds([y_min, y_max])
                         .paint(move |ctx| {
-                            // Filled columns: vertical line per bin from DB_MIN up to bin level.
-                            // This anchors the spectrum to the panel bottom on a fixed dBFS scale.
+                            // 1. Hold ghost (behind live signal)
+                            if let Some(ref held) = held_bins {
+                                for i in 1..held.len() {
+                                    let y0 = held[i - 1].clamp(y_min_f, y_max_f) as f64;
+                                    let y1 = held[i].clamp(y_min_f, y_max_f) as f64;
+                                    ctx.draw(&CanvasLine {
+                                        x1: (i - 1) as f64, y1: y0,
+                                        x2: i as f64,       y2: y1,
+                                        color: hold_color,
+                                    });
+                                }
+                            }
+                            // 2. Filled columns
                             for i in 0..bins.len() {
                                 let y_top = bins[i].clamp(y_min_f, y_max_f) as f64;
                                 ctx.draw(&CanvasLine {
@@ -134,7 +200,7 @@ impl Panel for SpectrumPanel {
                                     color: bin_colors[i],
                                 });
                             }
-                            // Outline on top of the fill for a clean signal edge
+                            // 3. Outline
                             for i in 1..bins.len() {
                                 let y0 = bins[i - 1].clamp(y_min_f, y_max_f) as f64;
                                 let y1 = bins[i].clamp(y_min_f, y_max_f) as f64;
@@ -144,33 +210,75 @@ impl Panel for SpectrumPanel {
                                     color: bin_colors[i - 1],
                                 });
                             }
-                            // Peak hold markers
+                            // 4. Peak hold
                             for (i, &db) in peaks.iter().enumerate() {
                                 let y = db.clamp(y_min_f, y_max_f) as f64;
-                                ctx.draw(&Points {
-                                    coords: &[(i as f64, y)],
-                                    color: peak_hold_color,
-                                });
+                                ctx.draw(&Points { coords: &[(i as f64, y)], color: peak_hold_color });
                             }
-                            // Noise floor
+                            // 5. Noise floor
                             let nf = noise_floor.clamp(y_min_f, y_max_f) as f64;
-                            ctx.draw(&CanvasLine {
-                                x1: 0.0,       y1: nf,
-                                x2: n - 1.0,   y2: nf,
-                                color: noise_floor_color,
-                            });
+                            ctx.draw(&CanvasLine { x1: 0.0, y1: nf, x2: n - 1.0, y2: nf, color: noise_floor_color });
+                            // 6. Marker lines
+                            for &mx in &marker_xs {
+                                ctx.draw(&CanvasLine { x1: mx, y1: y_min, x2: mx, y2: y_max, color: marker_color });
+                            }
+                            // 7. Cursor line
+                            if let Some(cx) = cursor_x_canvas {
+                                ctx.draw(&CanvasLine { x1: cx, y1: y_min, x2: cx, y2: y_max, color: cursor_color });
+                            }
                         }),
                     canvas_area,
                 );
 
-                // Frequency axis labels — proportionally distributed across canvas width
-                let bw = frame.sample_rate;
-                let left_hz = frame.center_freq_hz as f64 - bw / 2.0;
+                // ── Band plan overlay (text on top of canvas, top row) ────
+                if canvas_area.height >= 2 && canvas_area.width > 4 {
+                    let cw = canvas_area.width as f64;
+                    let mut next_free_col: i32 = -1;
+                    for &(band_s, band_e, label) in BAND_PLAN {
+                        let bs = band_s as f64;
+                        let be = band_e as f64;
+                        if bs >= right_hz || be <= left_hz { continue; }
+                        let vis_s   = bs.max(left_hz);
+                        let vis_e   = be.min(right_hz);
+                        let center  = (vis_s + vis_e) / 2.0;
+                        let frac    = (center - left_hz) / bw;
+                        let col     = (frac * cw) as u16;
+                        let lw      = label.len() as u16;
+                        let col     = col.min(canvas_area.width.saturating_sub(lw));
+                        if col as i32 <= next_free_col { continue; }
+                        next_free_col = col as i32 + lw as i32 + 1;
+                        f.render_widget(
+                            Paragraph::new(Span::styled(label, Style::default().fg(theme.label))),
+                            Rect { x: canvas_area.x + col, y: canvas_area.y, width: lw, height: 1 },
+                        );
+                    }
+                }
+
+                // ── Marker labels (second row of canvas) ──────────────────
+                if canvas_area.height >= 3 {
+                    let cw = canvas_area.width as f64;
+                    for mk in &state.spectrum_markers {
+                        let frac = (mk.freq_hz as f64 - left_hz) / bw;
+                        if !(0.0..=1.0).contains(&frac) { continue; }
+                        let col = (frac * cw) as u16;
+                        let lw  = mk.label.len() as u16;
+                        let col = col.min(canvas_area.width.saturating_sub(lw));
+                        f.render_widget(
+                            Paragraph::new(Span::styled(
+                                format!("▼{}", mk.label),
+                                Style::default().fg(theme.status_warn).add_modifier(Modifier::BOLD),
+                            )),
+                            Rect { x: canvas_area.x + col, y: canvas_area.y + 1, width: lw + 1, height: 1 },
+                        );
+                    }
+                }
+
+                // ── Frequency axis ────────────────────────────────────────
                 let freq_labels: Vec<String> = (0..=4)
                     .map(|i| format!("{:.2}M", (left_hz + bw * i as f64 / 4.0) / 1_000_000.0))
                     .collect();
-                let cw = canvas_area.width as usize;
-                let lw = freq_labels.iter().map(|s| s.len()).max().unwrap_or(7);
+                let cw  = canvas_area.width as usize;
+                let lw  = freq_labels.iter().map(|s| s.len()).max().unwrap_or(7);
                 let seg = (cw.saturating_sub(lw)) / 4;
                 f.render_widget(
                     Paragraph::new(Span::raw(format!(
@@ -178,19 +286,23 @@ impl Panel for SpectrumPanel {
                         freq_labels[0], freq_labels[1],
                         freq_labels[2], freq_labels[3], freq_labels[4],
                         w = seg
-                    )))
-                    .style(Style::default().fg(theme.value)),
+                    ))).style(Style::default().fg(theme.value)),
                     freq_area,
                 );
 
-                // Tuning indicator — shown only in spectrum focus mode
+                // ── Tuning / cursor indicator (focus only) ────────────────
                 if let Some(ind_area) = indicator_area {
-                    let step_str = fmt_spectrum_step(state.spectrum_step_hz);
-                    let freq_str = format!("  {:.3} MHz  ", state.frequency as f64 / 1_000_000.0);
-                    let right_info = format!("  step {}  [/]", step_str);
-                    let fixed = 1 + 1 + freq_str.len() + 1 + 1 + right_info.len(); // ◀ + freq + ▶ + info
-                    let arm = (ind_area.width as usize).saturating_sub(fixed) / 2;
-                    let line = Line::from(vec![
+                    let step_str  = fmt_spectrum_step(state.spectrum_step_hz);
+                    let freq_str  = format!("  {:.3} MHz  ", state.frequency as f64 / 1_000_000.0);
+
+                    let right_info: String = match (cursor_freq_mhz, cursor_power) {
+                        (Some(cf), Some(pwr)) => format!("  cur: {:.3} MHz  {:.1} dBFS  J/K", cf, pwr),
+                        _ => format!("  step {}  [/]", step_str),
+                    };
+
+                    let fixed = 2 + freq_str.len() + right_info.len();
+                    let arm   = (ind_area.width as usize).saturating_sub(fixed) / 2;
+                    let line  = Line::from(vec![
                         Span::styled("─".repeat(arm), Style::default().fg(theme.border_dim)),
                         Span::styled("◀", Style::default().fg(theme.border_accent).add_modifier(Modifier::BOLD)),
                         Span::styled(freq_str, Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD)),
@@ -201,24 +313,16 @@ impl Panel for SpectrumPanel {
                     f.render_widget(Paragraph::new(line), ind_area);
                 }
 
-                // dBFS axis labels — each label placed at the character row that corresponds
-                // to its dB value in the canvas, so they stay aligned on any terminal height.
-                // Label column is 6 chars wide; Borders::RIGHT takes 1 → 5 chars for text.
+                // ── dBFS axis labels (dynamic, tracks zoom) ───────────────
                 let h = db_rows[0].height as usize;
                 if h > 0 {
-                    const DB_MARKERS: &[(f32, &str)] = &[
-                        (   0.0, "   0"),
-                        ( -30.0, " -30"),
-                        ( -60.0, " -60"),
-                        ( -90.0, " -90"),
-                        (-120.0, "-120"),
-                    ];
                     let mut label_lines: Vec<Line> = vec![Line::raw(""); h];
-                    for &(db, text) in DB_MARKERS {
-                        let frac = (DB_MAX - db) / (DB_MAX - DB_MIN);
-                        let row = (frac * h.saturating_sub(1) as f32).round() as usize;
+                    for i in 0..=4 {
+                        let frac = i as f32 / 4.0;
+                        let db   = y_max_f - (y_max_f - y_min_f) * frac;
+                        let row  = (frac * h.saturating_sub(1) as f32).round() as usize;
                         label_lines[row.min(h - 1)] = Line::from(
-                            Span::styled(text, Style::default().fg(theme.value))
+                            Span::styled(format!("{:>4.0}", db), Style::default().fg(theme.value))
                         );
                     }
                     f.render_widget(

@@ -30,6 +30,15 @@ impl Panel for FooterPanel {
                     format!(" Sample rate (2–20 MHz): [{}▌]  [Enter] Confirm  [Esc] Cancel ", m.input_buf),
                     theme.status_warn,
                 ),
+                InputMode::MarkerNameInput => {
+                    let freq_str = m.pending_marker_freq
+                        .map(|f| format!("{:.3} MHz", f as f64 / 1_000_000.0))
+                        .unwrap_or_default();
+                    (
+                        format!(" Marker name at {}:  [{}▌]  [Enter] Confirm  [Esc] Cancel ", freq_str, m.input_buf),
+                        theme.status_warn,
+                    )
+                }
                 InputMode::Normal => {
                     if let Some(panel_name) = &m.focused_panel {
                         let mut parts: Vec<String> = m.focused_panel_bindings.iter()

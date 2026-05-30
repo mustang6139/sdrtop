@@ -13,8 +13,8 @@ use crate::event::{AppEvent, EventStream};
 use crate::fft::FftWorker;
 use crate::hardware::{self, RxContext};
 use crate::state::{
-    InputMode, SdrMetrics, DEFAULT_FREQUENCY, DEFAULT_LNA_GAIN, DEFAULT_SAMPLE_RATE,
-    DEFAULT_VGA_GAIN, THROUGHPUT_HISTORY_LEN,
+    InputMode, SdrMetrics, SpectrumMarker, DEFAULT_FREQUENCY, DEFAULT_LNA_GAIN,
+    DEFAULT_SAMPLE_RATE, DEFAULT_VGA_GAIN, THROUGHPUT_HISTORY_LEN,
 };
 use crate::ui;
 
@@ -154,7 +154,13 @@ impl App {
             focused_panel: None,
             focused_panel_bindings: &[],
 
-            spectrum_step_hz: 100_000,
+            spectrum_step_hz:     100_000,
+            spectrum_y_min:       -120.0,
+            spectrum_y_max:       0.0,
+            spectrum_hold:        None,
+            spectrum_cursor_freq: None,
+            spectrum_markers:     cfg.display.spectrum_markers.clone(),
+            pending_marker_freq:  None,
 
             acc_drops: 0,
             acc_saturated: 0,
@@ -457,7 +463,13 @@ impl App {
             focused_panel: None,
             focused_panel_bindings: &[],
 
-            spectrum_step_hz: 100_000,
+            spectrum_step_hz:     100_000,
+            spectrum_y_min:       -120.0,
+            spectrum_y_max:       0.0,
+            spectrum_hold:        None,
+            spectrum_cursor_freq: None,
+            spectrum_markers:     vec![],
+            pending_marker_freq:  None,
 
             acc_drops: 0,
             acc_saturated: 0,
@@ -580,10 +592,11 @@ impl App {
     fn save_config(&self) {
         if self.device.is_none() { return; } // observer mode — nothing to save
         let Some(path) = &self.config_path else { return };
-        let (freq, rate, lna, vga, amp, wf_rows) = {
+        let (freq, rate, lna, vga, amp, wf_rows, markers) = {
             let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
             (m.frequency, m.config_sample_rate, m.lna_gain,
-             m.vga_gain, m.amp_enabled, m.waterfall.max_rows)
+             m.vga_gain, m.amp_enabled, m.waterfall.max_rows,
+             m.spectrum_markers.clone())
         };
         let cfg = AppConfig {
             radio: RadioConfig {
@@ -596,6 +609,7 @@ impl App {
             display: DisplayConfig {
                 active_preset:      self.engine.active_preset().to_string(),
                 waterfall_max_rows: wf_rows,
+                spectrum_markers:   markers,
             },
             theme: crate::config::ThemeConfig {
                 base: self.theme.name.to_string(),
@@ -626,6 +640,7 @@ impl App {
                                     let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
                                     m.focused_panel = None;
                                     m.focused_panel_bindings = &[];
+                                    m.spectrum_cursor_freq = None;
                                 }
                             }
                             KeyCode::Char('q') => {
@@ -708,6 +723,21 @@ impl App {
                                 let s = if m.waterfall.paused { "paused" } else { "resumed" };
                                 m.push_log(format!("Waterfall {}", s));
                             }
+                            // --- Hold toggle (global, works outside focus too) ---
+                            KeyCode::Char('h') => {
+                                let held = {
+                                    let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                    m.last_fft_frame.as_ref().map(|fr| fr.bins_dbfs.clone())
+                                };
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                if m.spectrum_hold.is_some() {
+                                    m.spectrum_hold = None;
+                                    m.push_log("Hold: off");
+                                } else if let Some(bins) = held {
+                                    m.spectrum_hold = Some(bins);
+                                    m.push_log("Hold: on — ghost spectrum frozen");
+                                }
+                            }
                             // --- Spectrum focus: ← → tune, [ ] step size ---
                             KeyCode::Left if self.engine.focused_panel_name() == Some("spectrum") => {
                                 if let Some(device) = &self.device {
@@ -750,6 +780,76 @@ impl App {
                                 let new_step = next_spectrum_step(m.spectrum_step_hz);
                                 m.spectrum_step_hz = new_step;
                                 m.push_log(format!("Step → {}", fmt_spectrum_step(new_step)));
+                            }
+                            // Zoom: ↑ raises noise floor cutoff (zoom in), ↓ lowers it (zoom out)
+                            KeyCode::Up if self.engine.focused_panel_name() == Some("spectrum") => {
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                let new_min = (m.spectrum_y_min + 10.0).min(m.spectrum_y_max - 20.0);
+                                m.spectrum_y_min = new_min;
+                                let ymax = m.spectrum_y_max;
+                                m.push_log(format!("Zoom: {:.0}…{:.0} dBFS", new_min, ymax));
+                            }
+                            KeyCode::Down if self.engine.focused_panel_name() == Some("spectrum") => {
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                let new_min = (m.spectrum_y_min - 10.0).max(-120.0);
+                                m.spectrum_y_min = new_min;
+                                let ymax = m.spectrum_y_max;
+                                m.push_log(format!("Zoom: {:.0}…{:.0} dBFS", new_min, ymax));
+                            }
+                            // Cursor: J = left, K = right (by step_hz)
+                            KeyCode::Char('j') if self.engine.focused_panel_name() == Some("spectrum") => {
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                let step = m.spectrum_step_hz;
+                                m.spectrum_cursor_freq = Some(match m.spectrum_cursor_freq {
+                                    Some(f) => f.saturating_sub(step).max(1_000_000),
+                                    None    => m.frequency,
+                                });
+                            }
+                            KeyCode::Char('k') if self.engine.focused_panel_name() == Some("spectrum") => {
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                let step = m.spectrum_step_hz;
+                                m.spectrum_cursor_freq = Some(match m.spectrum_cursor_freq {
+                                    Some(f) => (f + step).min(6_000_000_000),
+                                    None    => m.frequency,
+                                });
+                            }
+                            // Marker: M — if existing at position, remove it; otherwise open name input
+                            KeyCode::Char('m') if self.engine.focused_panel_name() == Some("spectrum") => {
+                                let (marker_freq, existing_idx) = {
+                                    let m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                    let freq = if let Some(f) = m.spectrum_cursor_freq {
+                                        f
+                                    } else if let Some(frame) = &m.last_fft_frame {
+                                        let peak_bin = frame.bins_dbfs.iter()
+                                            .enumerate()
+                                            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+                                            .map(|(i, _)| i)
+                                            .unwrap_or(frame.bins_dbfs.len() / 2);
+                                        let left_hz = m.frequency as f64 - frame.sample_rate / 2.0;
+                                        (left_hz + peak_bin as f64 / frame.bins_dbfs.len() as f64 * frame.sample_rate).round() as u64
+                                    } else {
+                                        m.frequency
+                                    };
+                                    let step = m.spectrum_step_hz;
+                                    let idx = m.spectrum_markers.iter().position(|mk| {
+                                        (mk.freq_hz as i64 - freq as i64).unsigned_abs() < step
+                                    });
+                                    (freq, idx)
+                                };
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                if let Some(idx) = existing_idx {
+                                    let removed = m.spectrum_markers.remove(idx);
+                                    m.push_log(format!("Marker removed: {}", removed.label));
+                                } else {
+                                    // Enter name input mode
+                                    m.pending_marker_freq = Some(marker_freq);
+                                    m.input_mode = InputMode::MarkerNameInput;
+                                    m.input_buf.clear();
+                                    m.push_log(format!(
+                                        "Name this marker at {:.3} MHz (Enter = confirm, empty = auto-label)",
+                                        marker_freq as f64 / 1_000_000.0
+                                    ));
+                                }
                             }
                             KeyCode::Up => {
                                 if let Some(device) = &self.device {
@@ -956,6 +1056,39 @@ impl App {
                                         }
                                     }
                                 }
+                            }
+                            _ => {}
+                        },
+                        InputMode::MarkerNameInput => match key.code {
+                            KeyCode::Esc => {
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                m.input_mode = InputMode::Normal;
+                                m.input_buf.clear();
+                                m.pending_marker_freq = None;
+                                m.push_log("Marker cancelled");
+                            }
+                            KeyCode::Backspace => {
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).input_buf.pop();
+                            }
+                            KeyCode::Char(c) => {
+                                self.state.lock().unwrap_or_else(|e| e.into_inner()).input_buf.push(c);
+                            }
+                            KeyCode::Enter => {
+                                let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                                if let Some(freq) = m.pending_marker_freq.take() {
+                                    let label = if m.input_buf.trim().is_empty() {
+                                        format!("M{}", m.spectrum_markers.len() + 1)
+                                    } else {
+                                        m.input_buf.trim().to_string()
+                                    };
+                                    m.push_log(format!(
+                                        "Marker: {} → {:.3} MHz",
+                                        label, freq as f64 / 1_000_000.0
+                                    ));
+                                    m.spectrum_markers.push(SpectrumMarker { freq_hz: freq, label });
+                                }
+                                m.input_mode = InputMode::Normal;
+                                m.input_buf.clear();
                             }
                             _ => {}
                         },

@@ -1,4 +1,11 @@
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SpectrumMarker {
+    pub freq_hz: u64,
+    pub label:   String,
+}
 
 #[derive(Clone)]
 pub struct WaterfallBuffer {
@@ -45,6 +52,7 @@ pub enum InputMode {
     Normal,
     FrequencyInput,
     SampleRateInput,
+    MarkerNameInput,
 }
 pub const LOG_MAX_ENTRIES: usize = 100;
 
@@ -133,8 +141,14 @@ pub struct SdrMetrics {
     pub focused_panel: Option<String>,
     pub focused_panel_bindings: &'static [(&'static str, &'static str)],
 
-    // --- Spectrum focus tuning ---
-    pub spectrum_step_hz: u64,
+    // --- Spectrum focus controls ---
+    pub spectrum_step_hz:      u64,
+    pub pending_marker_freq:   Option<u64>,
+    pub spectrum_y_min:        f32,
+    pub spectrum_y_max:        f32,
+    pub spectrum_hold:         Option<Vec<f32>>,
+    pub spectrum_cursor_freq:  Option<u64>,
+    pub spectrum_markers:      Vec<SpectrumMarker>,
 
     // --- Accumulators (written by rx_callback, reset by polling task) ---
     pub acc_drops: u64,

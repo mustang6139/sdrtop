@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::state::{DEFAULT_FREQUENCY, DEFAULT_LNA_GAIN, DEFAULT_SAMPLE_RATE, DEFAULT_VGA_GAIN};
+use crate::state::{SpectrumMarker, DEFAULT_FREQUENCY, DEFAULT_LNA_GAIN, DEFAULT_SAMPLE_RATE, DEFAULT_VGA_GAIN};
 
 fn default_frequency_hz() -> u64     { DEFAULT_FREQUENCY }
 fn default_sample_rate()  -> f64     { DEFAULT_SAMPLE_RATE }
@@ -43,6 +43,8 @@ pub struct DisplayConfig {
     pub active_preset: String,
     #[serde(default = "default_waterfall_max_rows")]
     pub waterfall_max_rows: usize,
+    #[serde(default)]
+    pub spectrum_markers: Vec<SpectrumMarker>,
 }
 
 impl Default for DisplayConfig {
@@ -50,6 +52,7 @@ impl Default for DisplayConfig {
         Self {
             active_preset:      "spectrum_waterfall".into(),
             waterfall_max_rows: 64,
+            spectrum_markers:   vec![],
         }
     }
 }
