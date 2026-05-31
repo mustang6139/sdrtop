@@ -72,10 +72,7 @@ impl Panel for SignalStripPanel {
         };
 
         let (rbw_str, rbw_col) = match state.waterfall.last_fft.as_ref().filter(|_| !stale) {
-            Some(fr) if !fr.bins_dbfs.is_empty() => {
-                let rbw = fr.sample_rate / fr.bins_dbfs.len() as f64;
-                (fmt_rbw(rbw), theme.value)
-            }
+            Some(fr) if fr.enbw_hz > 0.0 => (fmt_rbw(fr.enbw_hz), theme.value),
             _ => ("---".into(), theme.stale),
         };
 

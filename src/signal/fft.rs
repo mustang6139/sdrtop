@@ -36,6 +36,12 @@ impl FftWorker {
         let window = dsp::compute_window(self.window_fn, self.fft_size);
         let n = self.fft_size;
 
+        // ENBW coefficient: N × Σ(w²) / (Σ(w))² — exact for whatever window is used.
+        // Hann ≈ 1.5, Hamming ≈ 1.36, Blackman ≈ 1.73.
+        let w_sum_sq: f64 = window.iter().map(|&w| (w as f64).powi(2)).sum();
+        let w_sum:    f64 = window.iter().map(|&w| w as f64).sum();
+        let enbw_coeff = n as f64 * w_sum_sq / (w_sum * w_sum);
+
         // Pre-allocate all scratch buffers — reused every frame, zero heap churn
         let mut buf: Vec<u8> = Vec::new();
         let mut samples: Vec<Complex<f32>> = vec![Complex::default(); n];
@@ -174,6 +180,7 @@ impl FftWorker {
                         peak_to_nf_db,
                         channel_power_dbfs,
                         occupied_bw_hz,
+                        enbw_hz: enbw_coeff * sample_rate / n as f64,
                     });
                     m.waterfall.buffer.push(bins_arc);
                 }

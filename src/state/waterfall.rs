@@ -14,6 +14,7 @@ pub struct FftFrame {
     pub peak_to_nf_db:    f32,
     pub channel_power_dbfs: f32,
     pub occupied_bw_hz:   u64,
+    pub enbw_hz:          f64,
 }
 
 #[derive(Clone)]
