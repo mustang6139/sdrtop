@@ -13,7 +13,12 @@ pub trait Panel: Send + Sync {
 
     /// Keybindings shown in the footer when this panel is focused.
     /// Each entry: (key_label, description). Empty by default.
+    /// Do NOT include Esc or Tab — the footer appends those automatically.
     fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] { &[] }
+
+    /// Preferred rendered height in rows, given the available terminal width and current state.
+    /// Used by the layout engine for top/bottom panels. Default: 3 (1 content + 2 borders).
+    fn preferred_height(&self, _available_width: u16, _state: &SdrMetrics) -> u16 { 3 }
 }
 
 #[cfg(test)]

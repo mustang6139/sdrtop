@@ -57,7 +57,6 @@ impl Panel for WaterfallPanel {
             ("M",    "Place/remove cursor"),
             ("← →",  "Move cursor"),
             ("W",    "Pause / resume"),
-            ("Esc",  "Exit focus"),
         ]
     }
 

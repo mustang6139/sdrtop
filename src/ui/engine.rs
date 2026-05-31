@@ -83,8 +83,16 @@ impl LayoutEngine {
             matches!(s.position, Position::Left | Position::Right | Position::Body)
         }).collect();
 
-        let top_h: u16 = top_specs.iter().map(|s| s.height.unwrap_or(3)).sum();
-        let bot_h: u16 = bottom_specs.iter().map(|s| s.height.unwrap_or(3)).sum();
+        let top_h: u16 = top_specs.iter().map(|s| {
+            self.registry.get(&s.name)
+                .map(|p| p.preferred_height(size.width, state))
+                .unwrap_or(s.height.unwrap_or(3))
+        }).sum();
+        let bot_h: u16 = bottom_specs.iter().map(|s| {
+            self.registry.get(&s.name)
+                .map(|p| p.preferred_height(size.width, state))
+                .unwrap_or(s.height.unwrap_or(3))
+        }).sum();
 
         let outer = Layout::default()
             .direction(Direction::Vertical)
@@ -95,19 +103,23 @@ impl LayoutEngine {
             ])
             .split(size);
 
-        // Top panels — stacked downward, each with its declared height
+        // Top panels — stacked downward, each with its preferred height
         let mut y = outer[0].y;
         for spec in &top_specs {
-            let h = spec.height.unwrap_or(3);
+            let h = self.registry.get(&spec.name)
+                .map(|p| p.preferred_height(size.width, state))
+                .unwrap_or(spec.height.unwrap_or(3));
             let area = Rect { x: outer[0].x, y, width: outer[0].width, height: h };
             self.registry.render_panel(&spec.name, f, area, state, theme, focused == Some(spec.name.as_str()));
             y += h;
         }
 
-        // Bottom panels — stacked downward, each with its declared height
+        // Bottom panels — stacked downward, each with its preferred height
         let mut y = outer[2].y;
         for spec in &bottom_specs {
-            let h = spec.height.unwrap_or(3);
+            let h = self.registry.get(&spec.name)
+                .map(|p| p.preferred_height(size.width, state))
+                .unwrap_or(spec.height.unwrap_or(3));
             let area = Rect { x: outer[2].x, y, width: outer[2].width, height: h };
             self.registry.render_panel(&spec.name, f, area, state, theme, focused == Some(spec.name.as_str()));
             y += h;

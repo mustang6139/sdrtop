@@ -68,7 +68,6 @@ impl Panel for SpectrumPanel {
             ("M",    "Place/remove marker"),
             ("B",    "Cycle channel BW on nearest marker"),
             ("H",    "Hold/unhold frame"),
-            ("Esc",  "Exit focus"),
         ]
     }
 
