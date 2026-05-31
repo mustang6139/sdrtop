@@ -133,14 +133,14 @@ Available themes: `sdr` (default) · `nord` · `dracula` · `gruvbox` · `catppu
 
 ## Supported hardware
 
-| Device | Status | Notes |
-|---|---|---|
-| HackRF One | ✅ Full support | All diagnostics, gain stages, ADC metrics |
-| PortaPack H4M (Mayhem) | 🔧 In development | Telemetry panel via CDC/ACM serial |
-| RTL-SDR (R820T, E4000, R828D) | 🔲 Planned | Most common SDR dongle |
-| Airspy Mini / Airspy HF+ | 🔲 Planned | Needs hardware |
-| HackRF Pro | 🔲 Planned | Needs hardware |
-| LimeSDR / bladeRF / SDRplay / PlutoSDR | 🔲 Planned | Needs hardware |
+| Device                                 | Status            | Notes                                     |
+| -------------------------------------- | ----------------- | ----------------------------------------- |
+| HackRF One                             | ✅ Full support    | All diagnostics, gain stages, ADC metrics |
+| PortaPack H4M (Mayhem)                 | 🔧 In development | Telemetry panel via CDC/ACM serial        |
+| RTL-SDR (R820T, E4000, R828D)          | 🔲 Planned        | Most common SDR dongle                    |
+| Airspy Mini / Airspy HF+               | 🔲 Planned        | Needs hardware                            |
+| HackRF Pro                             | 🔲 Planned        | Needs hardware                            |
+| LimeSDR / bladeRF / SDRplay / PlutoSDR | 🔲 Planned        | Needs hardware                            |
 
 > Hardware support is added only after physical testing on real devices — no guessing from datasheets.  
 > See [Supporting the project](#supporting-the-project) if you want to help expand this list.

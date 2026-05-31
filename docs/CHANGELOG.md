@@ -70,6 +70,18 @@ Full details are in the linked phase logs and improvement files.
 - **Closure data reduced:** `col_data` / `col_peaks` / `held_data` arrays (~10 KB) replace the old 8 KB `bin_colors` Vec + moved `Arc<Vec<f32>>`; closure captures no bins or Theme
 - **`ColorDepth::detect()` cached:** `OnceLock` so `env::var` runs once at startup; all subsequent calls are a single atomic load
 
+### IMP-009 — Waterfall focus panel
+→ [details](improvements/imp-009-waterfall-focus-panel.md)
+
+- **Focus mode (`l`):** `Waterfa`**`l`**`l` title highlights the activation key; border switches to `border_focused`; footer shows waterfall-specific bindings; `Esc` exits and resets scroll + cursor
+- **Colour scale zoom (`↑`/`↓` focus):** adjusts `waterfall_db_min` in 10 dB steps (range: −120…−20 dBFS); dBFS legend tracks the current range; persists after exit
+- **Scroll history (`J`/`K` focus):** scrolls through stored rows; offset shown as `[↑N]` in title; reset on `Esc`
+- **Row stride (`[`/`]` focus):** averages N FFT frames into one waterfall row (×1 → ×64); slows scroll rate, extends visible history (×64 ≈ 26 s at 10 MHz); stride shown as `[×N]` in title
+- **Frequency cursor (`M`/`←`/`→` focus):** vertical `│` line at chosen frequency; indicator row shows `cur: freq  dBFS  N s ago`; row timestamps stored per push enable accurate elapsed time
+- **Band plan overlay:** same 14 allocations as spectrum panel; `BAND_PLAN` constant moved to shared `src/ui/band_plan.rs` so both panels draw from one source
+- **CPU measurement fix:** `last_ticks` seeded from current value at task start — eliminates the artificial 100% spike on first reading
+- **FFT throttle:** state updates capped at ~30 fps (`UPDATE_INTERVAL = 33 ms`); EMA + peak-hold still run on every frame; reduces noise-floor sort + occupied-BW sort from ~4 882/s to ~30/s
+
 ---
 
 ## 2026-05-29

@@ -3,7 +3,7 @@
 > btop-inspired universal SDR terminal monitor, written in Rust.
 
 **Stack:** Rust · ratatui · libhackrf FFI · tokio · rustfft · crossbeam  
-**Progress:** Phase 11 complete · Phase 12 in progress · 6 bugs tracked · 8 improvements logged
+**Progress:** Phase 11 complete · Phase 12 in progress · 6 bugs tracked · 9 improvements logged
 
 ---
 
@@ -62,6 +62,7 @@ Additions made between planned phases — not bugs, not roadmap items.
 | [IMP-006](improvements/imp-006-spectrum-analysis-tools.md) | Spectrum analysis tools — band plan, zoom, hold, cursor, named markers | 12→13 | ✅ Done |
 | [IMP-007](improvements/imp-007-spectrum-panel-ux-fixes.md) | Spectrum panel UX fixes — tuning indicator centering, frame rate cap | 12→13 | ✅ Done |
 | [IMP-008](improvements/imp-008-performance-overhaul.md) | Performance overhaul — Arc shared buffers, FFT scratch pre-alloc, canvas downsampling | 12→13 | ✅ Done |
+| [IMP-009](improvements/imp-009-waterfall-focus-panel.md) | Waterfall focus panel — zoom, scroll, stride, frequency cursor, band plan overlay | 12→13 | ✅ Done |
 
 ---
 

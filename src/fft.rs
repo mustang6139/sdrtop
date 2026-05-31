@@ -49,6 +49,13 @@ impl FftWorker {
         let mut occ_scratch: Vec<(f32, usize)> = vec![(0.0, 0); n];
         let mut initialized = false;
 
+        // Throttle state writes to ~30 fps — EMA runs on every frame for accuracy,
+        // but the expensive analysis + state lock fires at display rate only.
+        const UPDATE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
+        let mut last_state_update = std::time::Instant::now()
+            .checked_sub(UPDATE_INTERVAL)
+            .unwrap_or_else(std::time::Instant::now);
+
         while let Ok(chunk) = self.sample_rx.recv() {
             buf.extend_from_slice(&chunk);
 
@@ -76,11 +83,11 @@ impl FftWorker {
                     mags[i] = if norm > 0.0 { 20.0 * norm.log10() } else { DB_FLOOR };
                 }
 
-                // fftshift in-place: copy halves into pre-allocated shifted
+                // fftshift in-place
                 shifted[..n / 2].copy_from_slice(&mags[n / 2..]);
                 shifted[n / 2..].copy_from_slice(&mags[..n / 2]);
 
-                // EMA smoothing in-place
+                // EMA smoothing + peak hold — run on every frame for accurate averaging
                 if !initialized {
                     smoothed.copy_from_slice(&shifted);
                     peak.copy_from_slice(&shifted);
@@ -91,14 +98,19 @@ impl FftWorker {
                     for (s, &new) in smoothed.iter_mut().zip(shifted.iter()) {
                         *s = alpha * new + one_minus * *s;
                     }
-                    // Peak hold with per-frame decay
                     let decay = self.peak_decay_db;
                     for (p, &s) in peak.iter_mut().zip(smoothed.iter()) {
                         *p = (*p - decay).max(s);
                     }
                 }
 
-                // Noise floor: mean of bottom 10% via partial sort — O(n) average vs O(n log n)
+                // Throttle: skip expensive analysis + state update until next display frame
+                if last_state_update.elapsed() < UPDATE_INTERVAL {
+                    continue;
+                }
+                last_state_update = std::time::Instant::now();
+
+                // Noise floor: mean of bottom 10% via partial sort — O(n) average
                 noise_scratch.copy_from_slice(&smoothed);
                 let nf_count = (n / 10).max(1);
                 noise_scratch.select_nth_unstable_by(nf_count - 1, |a, b| {
@@ -125,7 +137,7 @@ impl FftWorker {
                     f32::NEG_INFINITY
                 };
 
-                // 99% occupied BW using pre-allocated scratch (no alloc per frame)
+                // 99% occupied BW using pre-allocated scratch
                 let occupied_bw_hz = if total_linear > 0.0 && sample_rate > 0.0 {
                     let threshold = total_linear * 0.99;
                     for (i, &b) in smoothed.iter().enumerate() {

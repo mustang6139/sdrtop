@@ -1211,7 +1211,9 @@ fn fmt_duration(secs: u64) -> String {
 fn spawn_sys_resource_task(state: Arc<Mutex<SdrMetrics>>) {
     tokio::spawn(async move {
         let ticks_per_sec = unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as f64;
-        let mut last_ticks: u64 = 0;
+        // Seed last_ticks with the current value so the first delta covers only
+        // the first measurement interval, not all accumulated CPU since process start.
+        let mut last_ticks = read_process_stats().map(|(t, _)| t).unwrap_or(0);
         let mut last_time = Instant::now();
 
         loop {
