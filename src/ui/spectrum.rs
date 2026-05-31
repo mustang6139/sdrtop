@@ -92,7 +92,7 @@ impl Panel for SpectrumPanel {
             title_spans.push(Span::styled(" [HOLD]", Style::default().fg(theme.status_warn)));
         }
         if stale {
-            title_spans.push(Span::raw(" [STALE]"));
+            title_spans.push(Span::styled(" [STALE]", Style::default().fg(theme.stale)));
         }
         title_spans.push(Span::raw(" "));
         let title_line = Line::from(title_spans);
@@ -384,10 +384,11 @@ impl Panel for SpectrumPanel {
                         _ => format!("  step {}  [/]", step_str),
                     };
 
-                    let center_len = 2 + freq_str.len();
-                    let left_arm   = (ind_area.width as usize).saturating_sub(center_len) / 2;
-                    let right_arm  = (ind_area.width as usize)
-                        .saturating_sub(left_arm + center_len + right_info.len());
+                    let center_len    = 2 + freq_str.chars().count();
+                    let right_info_w  = right_info.chars().count();
+                    let dashes        = (ind_area.width as usize).saturating_sub(center_len + right_info_w);
+                    let left_arm      = dashes / 2;
+                    let right_arm     = dashes - left_arm;
                     let line  = Line::from(vec![
                         Span::styled("─".repeat(left_arm), Style::default().fg(theme.border_dim)),
                         Span::styled("◀", Style::default().fg(theme.border_accent).add_modifier(Modifier::BOLD)),
