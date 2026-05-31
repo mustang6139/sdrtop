@@ -44,18 +44,18 @@ impl Panel for HardwareHealthPanel {
             ])
             .split(inner);
 
-        let drop_color = threshold_color(state.drops_per_sec as f64, 1.0, 10.0, theme);
+        let drop_color = threshold_color(state.signal.drops_per_sec as f64, 1.0, 10.0, theme);
         f.render_widget(
             Paragraph::new(Span::styled(
                 format!(
                     "Drops: {}/s  (session total: {})",
-                    state.drops_per_sec, state.total_drops_session
+                    state.signal.drops_per_sec, state.signal.total_drops_session
                 ),
                 Style::default().fg(drop_color),
             )),
             rows[0],
         );
-        let drop_data: Vec<u64> = state.drop_history.iter().cloned().collect();
+        let drop_data: Vec<u64> = state.signal.drop_history.iter().cloned().collect();
         f.render_widget(
             Sparkline::default()
                 .data(&drop_data)
@@ -63,18 +63,18 @@ impl Panel for HardwareHealthPanel {
             rows[1],
         );
 
-        let sat_color = threshold_color(state.adc_saturation_pct as f64, 1.0, 5.0, theme);
+        let sat_color = threshold_color(state.signal.adc_saturation_pct as f64, 1.0, 5.0, theme);
         f.render_widget(
             Paragraph::new(Span::styled(
                 format!(
                     "ADC sat: {:.1}%  (peak: {:.1}%)",
-                    state.adc_saturation_pct, state.adc_saturation_peak
+                    state.signal.adc_saturation_pct, state.signal.adc_saturation_peak
                 ),
                 Style::default().fg(sat_color),
             )),
             rows[2],
         );
-        let sat_data: Vec<u64> = state.saturation_history.iter()
+        let sat_data: Vec<u64> = state.signal.saturation_history.iter()
             .map(|v| *v as u64)
             .collect();
         f.render_widget(
@@ -84,19 +84,19 @@ impl Panel for HardwareHealthPanel {
             rows[3],
         );
 
-        let jitter_color = threshold_color(state.callback_jitter_us as f64, 500.0, 2000.0, theme);
+        let jitter_color = threshold_color(state.iq.callback_jitter_us as f64, 500.0, 2000.0, theme);
         f.render_widget(
             Paragraph::new(Span::styled(
-                format!("Jitter: {} µs (inter-callback mean)", state.callback_jitter_us),
+                format!("Jitter: {} µs (inter-callback mean)", state.iq.callback_jitter_us),
                 Style::default().fg(jitter_color),
             )),
             rows[4],
         );
 
-        let usb_color = if state.usb_errors_session > 0 { theme.status_crit } else { theme.status_ok };
+        let usb_color = if state.signal.usb_errors_session > 0 { theme.status_crit } else { theme.status_ok };
         f.render_widget(
             Paragraph::new(Span::styled(
-                format!("USB errors: {} (session)", state.usb_errors_session),
+                format!("USB errors: {} (session)", state.signal.usb_errors_session),
                 Style::default().fg(usb_color),
             )),
             rows[5],

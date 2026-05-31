@@ -34,7 +34,7 @@ impl Panel for SystemResourcesPanel {
             ])
             .split(inner);
 
-        let cpu = state.process_cpu_pct.clamp(0.0, 100.0);
+        let cpu = state.system.process_cpu_pct.clamp(0.0, 100.0);
         let cpu_color = if cpu > 80.0 { theme.status_crit }
             else if cpu > 50.0       { theme.status_warn  }
             else                     { theme.status_ok    };
@@ -46,7 +46,7 @@ impl Panel for SystemResourcesPanel {
             rows[0],
         );
 
-        let rss = state.process_rss_mb;
+        let rss = state.system.process_rss_mb;
         let rss_ratio = (rss as f64 / 512.0).min(1.0);
         let rss_color = if rss_ratio > 0.8 { theme.status_crit } else { theme.value };
         f.render_widget(
@@ -57,7 +57,7 @@ impl Panel for SystemResourcesPanel {
             rows[1],
         );
 
-        let throughput_mb = state.current_throughput_bps as f64 / 1_000_000.0;
+        let throughput_mb = state.radio.current_throughput_bps as f64 / 1_000_000.0;
         f.render_widget(
             Paragraph::new(Span::styled(
                 format!("USB  {:.2} MB/s", throughput_mb),
@@ -66,7 +66,7 @@ impl Panel for SystemResourcesPanel {
             rows[2],
         );
 
-        let sparkline_data: Vec<u64> = state.throughput_history.iter().cloned().collect();
+        let sparkline_data: Vec<u64> = state.radio.throughput_history.iter().cloned().collect();
         f.render_widget(
             Sparkline::default()
                 .data(&sparkline_data)

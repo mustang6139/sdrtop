@@ -8,8 +8,8 @@ use ratatui::{
 use crate::state::SdrMetrics;
 
 pub fn render(f: &mut Frame, area: Rect, m: &SdrMetrics, board_name: &str, serial: &str, theme: &crate::Theme) {
-    let status_text = if m.hw_streaming { "STREAMING" } else { "IDLE" };
-    let status_color = if m.hw_streaming { theme.status_ok } else { theme.status_warn };
+    let status_text = if m.radio.hw_streaming { "STREAMING" } else { "IDLE" };
+    let status_color = if m.radio.hw_streaming { theme.status_ok } else { theme.status_warn };
 
     let info_text = format!(
         "Model:       {}\n\
@@ -22,11 +22,11 @@ pub fn render(f: &mut Frame, area: Rect, m: &SdrMetrics, board_name: &str, seria
         board_name,
         serial,
         status_text,
-        m.frequency as f64 / 1_000_000.0,
-        m.config_sample_rate / 1_000_000.0,
-        m.current_throughput_bps as f64 / (1024.0 * 1024.0),
-        m.actual_sample_rate as f64 / 1_000_000.0,
-        if m.amp_enabled { "ON" } else { "OFF" },
+        m.radio.frequency as f64 / 1_000_000.0,
+        m.radio.config_sample_rate / 1_000_000.0,
+        m.radio.current_throughput_bps as f64 / (1024.0 * 1024.0),
+        m.radio.actual_sample_rate as f64 / 1_000_000.0,
+        if m.radio.amp_enabled { "ON" } else { "OFF" },
     );
 
     let panel = Paragraph::new(info_text)

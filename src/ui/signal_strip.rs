@@ -47,7 +47,7 @@ impl Panel for SignalStripPanel {
     fn min_size(&self) -> (u16, u16) { (60, 3) }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, _focused: bool) {
-        let stale = state.last_fft_frame.as_ref()
+        let stale = state.waterfall.last_fft.as_ref()
             .map(|fr| fr.timestamp.elapsed().as_millis() > 500)
             .unwrap_or(true);
 
@@ -62,17 +62,17 @@ impl Panel for SignalStripPanel {
         let lbl = |s: &'static str| Span::styled(s, Style::default().fg(theme.label));
         let val = |s: String, c: Color| Span::styled(s, Style::default().fg(c));
 
-        let snr_str = if stale { "---".into() } else { format!("{:.1} dB", state.snr_db) };
-        let snr_col = if stale { theme.stale } else { snr_color(state.snr_db, theme) };
+        let snr_str = if stale { "---".into() } else { format!("{:.1} dB", state.signal.snr_db) };
+        let snr_col = if stale { theme.stale } else { snr_color(state.signal.snr_db, theme) };
 
-        let pwr_str = if stale || !state.channel_power_dbfs.is_finite() {
+        let pwr_str = if stale || !state.signal.channel_power_dbfs.is_finite() {
             "--- dBFS".into()
         } else {
-            format!("{:.1} dBFS", state.channel_power_dbfs)
+            format!("{:.1} dBFS", state.signal.channel_power_dbfs)
         };
         let pwr_col = if stale { theme.stale } else { theme.value };
 
-        let occ_str = if stale { "---".into() } else { fmt_occ(state.occupied_bw_hz) };
+        let occ_str = if stale { "---".into() } else { fmt_occ(state.signal.occupied_bw_hz) };
         let occ_col = if stale { theme.stale } else { theme.value };
 
         let line = Line::from(vec![
@@ -81,21 +81,21 @@ impl Panel for SignalStripPanel {
             sep.clone(),
             lbl("PWR "), val(pwr_str, pwr_col),
             sep.clone(),
-            lbl("SAT "), val(format!("{:.1}%", state.adc_saturation_pct),
-                             sat_color(state.adc_saturation_pct, theme)),
+            lbl("SAT "), val(format!("{:.1}%", state.signal.adc_saturation_pct),
+                             sat_color(state.signal.adc_saturation_pct, theme)),
             sep.clone(),
-            lbl("DROP "), val(format!("{}/s", state.drops_per_sec),
-                              drop_color(state.drops_per_sec, theme)),
+            lbl("DROP "), val(format!("{}/s", state.signal.drops_per_sec),
+                              drop_color(state.signal.drops_per_sec, theme)),
             sep.clone(),
             lbl("OCC "), val(occ_str, occ_col),
             sep.clone(),
-            lbl("JIT "), val(format!("{} µs", state.callback_jitter_us),
-                             jit_color(state.callback_jitter_us, theme)),
+            lbl("JIT "), val(format!("{} µs", state.iq.callback_jitter_us),
+                             jit_color(state.iq.callback_jitter_us, theme)),
             sep.clone(),
-            lbl("CPU "), val(format!("{:.1}%", state.process_cpu_pct),
-                             cpu_color(state.process_cpu_pct, theme)),
+            lbl("CPU "), val(format!("{:.1}%", state.system.process_cpu_pct),
+                             cpu_color(state.system.process_cpu_pct, theme)),
             sep.clone(),
-            lbl("RAM "), val(format!("{} MB", state.process_rss_mb), theme.value),
+            lbl("RAM "), val(format!("{} MB", state.system.process_rss_mb), theme.value),
         ]);
 
         f.render_widget(Paragraph::new(line), inner);

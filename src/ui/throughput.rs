@@ -34,7 +34,7 @@ pub(crate) fn draw_usb_graph(
 ) {
     if area.height < 3 || area.width < 8 { return; }
 
-    let peak_kb = state.throughput_history.iter().copied().max().unwrap_or(0);
+    let peak_kb = state.radio.throughput_history.iter().copied().max().unwrap_or(0);
     let peak_mb = (peak_kb as f64 / 1024.0).max(1.0);
     let canvas_height = (area.height - 1) as usize;
     let step = nice_step_mb(peak_mb, canvas_height);
@@ -79,7 +79,7 @@ pub(crate) fn draw_usb_graph(
     ]);
     f.render_widget(Paragraph::new(y_lines), y_axis_area);
 
-    let history: Vec<f64> = state.throughput_history.iter()
+    let history: Vec<f64> = state.radio.throughput_history.iter()
         .map(|&kb| kb as f64 / 1024.0)
         .collect();
     let n = history.len();

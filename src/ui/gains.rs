@@ -30,25 +30,25 @@ impl Panel for GainsPanel {
         let lna_gauge = Gauge::default()
             .block(
                 Block::default()
-                    .title(format!(" LNA Gain: {} dB ", m.lna_gain))
+                    .title(format!(" LNA Gain: {} dB ", m.radio.lna_gain))
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
                     .border_style(border_style),
             )
             .gauge_style(Style::default().fg(theme.value_hi).add_modifier(Modifier::ITALIC))
-            .percent(((m.lna_gain as f32 / 40.0) * 100.0) as u16);
+            .percent(((m.radio.lna_gain as f32 / 40.0) * 100.0) as u16);
         f.render_widget(lna_gauge, chunks[0]);
 
         let vga_gauge = Gauge::default()
             .block(
                 Block::default()
-                    .title(format!(" VGA Gain: {} dB ", m.vga_gain))
+                    .title(format!(" VGA Gain: {} dB ", m.radio.vga_gain))
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
                     .border_style(border_style),
             )
             .gauge_style(Style::default().fg(theme.value).add_modifier(Modifier::ITALIC))
-            .percent(((m.vga_gain as f32 / 62.0) * 100.0) as u16);
+            .percent(((m.radio.vga_gain as f32 / 62.0) * 100.0) as u16);
         f.render_widget(vga_gauge, chunks[1]);
 
         let sr_gauge = Gauge::default()
@@ -56,17 +56,17 @@ impl Panel for GainsPanel {
                 Block::default()
                     .title(format!(
                         " Sample Rate: {:.1} Msps ",
-                        m.actual_sample_rate as f64 / 1_000_000.0
+                        m.radio.actual_sample_rate as f64 / 1_000_000.0
                     ))
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
                     .border_style(border_style),
             )
             .gauge_style(Style::default().fg(theme.status_ok).add_modifier(Modifier::ITALIC))
-            .percent(((m.actual_sample_rate as f32 / 20_000_000.0) * 100.0).min(100.0) as u16);
+            .percent(((m.radio.actual_sample_rate as f32 / 20_000_000.0) * 100.0).min(100.0) as u16);
         f.render_widget(sr_gauge, chunks[2]);
 
-        let sparkline_data: Vec<u64> = m.throughput_history.iter().cloned().collect();
+        let sparkline_data: Vec<u64> = m.radio.throughput_history.iter().cloned().collect();
         let sparkline_max = sparkline_data.iter().cloned().max().unwrap_or(0).max(1);
         let sparkline = Sparkline::default()
             .block(

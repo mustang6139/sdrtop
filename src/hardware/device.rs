@@ -40,7 +40,7 @@ fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
         if t.valid_length < 0 { return 0; }
         if t.valid_length == 0 {
             if let Ok(mut m) = ctx.metrics.lock() {
-                m.usb_errors_session += 1;
+                m.signal.usb_errors_session += 1;
             }
             return 0;
         }
@@ -54,12 +54,12 @@ fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
         {
             let Ok(mut m) = ctx.metrics.lock() else { return 0; };
 
-            m.bytes_since_last_poll += t.valid_length as u64;
+            m.radio.bytes_since_last_poll += t.valid_length as u64;
 
             if t.valid_length < t.buffer_length {
                 let dropped_pairs = ((t.buffer_length - t.valid_length) / 2) as u64;
-                m.acc_drops += dropped_pairs;
-                m.total_drops_session += dropped_pairs;
+                m.acc.drops += dropped_pairs;
+                m.signal.total_drops_session += dropped_pairs;
             }
 
             let mut saturated: u64 = 0;
@@ -83,24 +83,24 @@ fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
                 // Clamp to bin 31: i8::MIN.unsigned_abs() == 128, which would overflow
                 // a 32-element array without the min(31).
                 let amp = i_byte.unsigned_abs().max(q_byte.unsigned_abs());
-                m.acc_iq_hist[((amp / 4) as usize).min(31)] += 1;
+                m.acc.iq_hist[((amp / 4) as usize).min(31)] += 1;
             }
 
             let pairs = (buf.len() / 2) as u64;
-            m.acc_saturated    += saturated;
-            m.acc_i_sum        += i_sum;
-            m.acc_q_sum        += q_sum;
-            m.acc_i_sq_sum     += i_sq as u64;
-            m.acc_q_sq_sum     += q_sq as u64;
-            m.acc_sample_count += pairs;
+            m.acc.saturated    += saturated;
+            m.acc.i_sum        += i_sum;
+            m.acc.q_sum        += q_sum;
+            m.acc.i_sq_sum     += i_sq as u64;
+            m.acc.q_sq_sum     += q_sq as u64;
+            m.acc.sample_count += pairs;
 
             let now = std::time::Instant::now();
-            if let Some(last) = m.acc_last_callback_us {
+            if let Some(last) = m.acc.last_callback {
                 let gap_us = now.duration_since(last).as_micros() as u64;
-                m.acc_jitter_sum_us += gap_us;
-                m.acc_jitter_count  += 1;
+                m.acc.jitter_sum_us += gap_us;
+                m.acc.jitter_count  += 1;
             }
-            m.acc_last_callback_us = Some(now);
+            m.acc.last_callback = Some(now);
         }
         // Lock released — allocate outside the critical section
         ctx.sample_tx.try_send(buf.to_vec()).ok();

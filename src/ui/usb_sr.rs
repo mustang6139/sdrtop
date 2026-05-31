@@ -15,7 +15,7 @@ impl Panel for UsbSrPanel {
     fn min_size(&self) -> (u16, u16) { (60, 5) }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, _focused: bool) {
-        let cfg_msps = state.config_sample_rate / 1_000_000.0;
+        let cfg_msps = state.radio.config_sample_rate / 1_000_000.0;
         let block = Block::default()
             .title(format!(" USB Throughput  ·  SR {:.2} Msps ", cfg_msps))
             .borders(Borders::ALL)

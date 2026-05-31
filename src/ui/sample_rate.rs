@@ -35,9 +35,9 @@ pub(crate) fn draw_sr_graph(
 ) {
     if area.height < 3 || area.width < 8 { return; }
 
-    let cfg_msps = state.config_sample_rate / 1_000_000.0;
+    let cfg_msps = state.radio.config_sample_rate / 1_000_000.0;
 
-    let all_values: Vec<f64> = state.sample_rate_history.iter()
+    let all_values: Vec<f64> = state.radio.sample_rate_history.iter()
         .map(|&sps| sps as f64 / 1_000_000.0)
         .collect();
     let streaming_values: Vec<f64> = all_values.iter().cloned()
@@ -139,7 +139,7 @@ impl Panel for SampleRatePanel {
     fn min_size(&self) -> (u16, u16) { (40, 4) }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, _focused: bool) {
-        let cfg_msps = state.config_sample_rate / 1_000_000.0;
+        let cfg_msps = state.radio.config_sample_rate / 1_000_000.0;
         let block = Block::default()
             .title(format!(" SR  {:.2}  Msps ", cfg_msps))
             .title_alignment(Alignment::Right)

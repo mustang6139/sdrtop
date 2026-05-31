@@ -35,9 +35,9 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
     use ratatui::style::Color;
 
     // --- Status badge ---
-    let (badge_text, badge_bg, badge_fg): (&str, Color, Color) = if state.observer_mode {
+    let (badge_text, badge_bg, badge_fg): (&str, Color, Color) = if state.observer.active {
         (" ◈ OBSERVER ", theme.observer, Color::Rgb(4, 6, 15))
-    } else if state.hw_streaming {
+    } else if state.radio.hw_streaming {
         (" ● RX ", theme.status_ok, Color::Rgb(3, 15, 6))
     } else {
         (" ○ IDLE ", theme.status_warn, Color::Rgb(10, 7, 0))
@@ -48,43 +48,43 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
     // Mayhem nightly: "n_XXXXXX"; Mayhem release: "vX.Y.Z" → label as "mayhem fw "
     // Standard HackRF firmware ("2024.02.1", "git-...") → label as "hackrf fw "
     // Both labels are exactly 10 chars so top_band_gap stays valid.
-    let (fw_val, fw_label): (String, &str) = if state.observer_mode {
+    let (fw_val, fw_label): (String, &str) = if state.observer.active {
         ("—".to_string(), "hackrf fw ")
     } else {
-        let is_mayhem = state.fw_version.starts_with("n_")
-            || (state.fw_version.starts_with('v')
-                && state.fw_version.chars().nth(1).map_or(false, |c| c.is_ascii_digit()));
+        let is_mayhem = state.system.fw_version.starts_with("n_")
+            || (state.system.fw_version.starts_with('v')
+                && state.system.fw_version.chars().nth(1).map_or(false, |c| c.is_ascii_digit()));
         let label = if is_mayhem { "mayhem fw " } else { "hackrf fw " };
-        (state.fw_version.clone(), label)
+        (state.system.fw_version.clone(), label)
     };
-    let fw_color = if state.observer_mode { theme.label } else { theme.value };
+    let fw_color = if state.observer.active { theme.label } else { theme.value };
     let fw_len = fw_val.chars().count();
 
     // --- AMP value (always 3 terminal columns) ---
-    let (amp_val, amp_color) = if state.observer_mode {
+    let (amp_val, amp_color) = if state.observer.active {
         ("—  ".to_string(), theme.label)
-    } else if state.amp_enabled {
+    } else if state.radio.amp_enabled {
         ("ON ".to_string(), theme.value_hi)
     } else {
         ("OFF".to_string(), theme.label)
     };
 
     // --- USB value (always 9 terminal columns) ---
-    let (usb_val, usb_color) = if state.hw_streaming && state.current_throughput_bps > 0 {
-        let mb = state.current_throughput_bps as f64 / 1_000_000.0;
+    let (usb_val, usb_color) = if state.radio.hw_streaming && state.radio.current_throughput_bps > 0 {
+        let mb = state.radio.current_throughput_bps as f64 / 1_000_000.0;
         (format!("{:4.1} MB/s", mb), theme.value)
     } else {
         ("—        ".to_string(), theme.label)  // 1 + 8 spaces = 9 chars
     };
 
     // --- Gap ---
-    let board_len = state.board_name.chars().count();
+    let board_len = state.system.board_name.chars().count();
     let gap = top_band_gap(board_len, badge_len, fw_len, inner_width);
 
     Line::from(vec![
         Span::raw(" "),
         Span::styled(
-            format!(" {} ", state.board_name),
+            format!(" {} ", state.system.board_name),
             Style::default()
                 .fg(theme.value_hi)
                 .bg(Color::Rgb(20, 25, 38))
@@ -130,20 +130,20 @@ fn separator_line(theme: &crate::Theme, outer_width: u16) -> Line<'static> {
 /// Left block (freq + SR): 31 chars. Right block (LNA + VGA + trailing): 42 chars.
 /// Gap between them fills the remaining inner width, mirroring top_band_line.
 fn bottom_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> Line<'static> {
-    let active = state.hw_streaming && !state.observer_mode;
+    let active = state.radio.hw_streaming && !state.observer.active;
 
     // Frequency: right-padded to 8 chars (covers 0.000–9999.999 MHz)
-    let freq_str = format!("{:8.3}", state.frequency as f64 / 1_000_000.0);
+    let freq_str = format!("{:8.3}", state.radio.frequency as f64 / 1_000_000.0);
     // Sample rate: right-padded to 4 chars (HackRF range 2.0–20.0 Msps)
-    let sr_str = format!("{:4.1}", state.config_sample_rate / 1_000_000.0);
+    let sr_str = format!("{:4.1}", state.radio.config_sample_rate / 1_000_000.0);
     // Gain values: right-padded to 2 chars
-    let lna_str = format!("{:2}", state.lna_gain);
-    let vga_str = format!("{:2}", state.vga_gain);
+    let lna_str = format!("{:2}", state.radio.lna_gain);
+    let vga_str = format!("{:2}", state.radio.vga_gain);
 
-    let (lna_filled, lna_empty) = gain_bar(state.lna_gain, 40, 8);
-    let (vga_filled, vga_empty) = gain_bar(state.vga_gain, 62, 8);
+    let (lna_filled, lna_empty) = gain_bar(state.radio.lna_gain, 40, 8);
+    let (vga_filled, vga_empty) = gain_bar(state.radio.vga_gain, 62, 8);
 
-    let freq_color = if state.observer_mode { theme.label } else { theme.border_accent };
+    let freq_color = if state.observer.active { theme.label } else { theme.border_accent };
     let val_color  = if active { theme.value } else { theme.label };
     let lna_color  = if active { theme.status_ok } else { theme.label };
     let vga_color  = if active { theme.status_warn } else { theme.label };

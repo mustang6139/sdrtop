@@ -32,7 +32,7 @@ impl Panel for SignalMetricsPanel {
     fn min_size(&self) -> (u16, u16) { (32, 6) }
 
     fn render(&self, f: &mut Frame, area: ratatui::layout::Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
-        let stale = state.last_fft_frame.as_ref()
+        let stale = state.waterfall.last_fft.as_ref()
             .map(|fr| fr.timestamp.elapsed().as_millis() > 500)
             .unwrap_or(true);
 
@@ -51,7 +51,7 @@ impl Panel for SignalMetricsPanel {
         let lbl = Style::default().fg(theme.label);
         let val = Style::default().fg(theme.value);
 
-        let noise_str = state.last_fft_frame.as_ref()
+        let noise_str = state.waterfall.last_fft.as_ref()
             .map(|fr| format!("{:.1} dBFS", fr.noise_floor))
             .unwrap_or_else(|| "---".into());
 
@@ -59,15 +59,15 @@ impl Panel for SignalMetricsPanel {
             Line::from(vec![
                 Span::styled(format!("{:<15}", "SNR"), lbl),
                 Span::styled(
-                    if stale { "---".into() } else { format!("{:.1} dB", state.snr_db) },
-                    Style::default().fg(if stale { theme.label } else { snr_color(state.snr_db, theme) }),
+                    if stale { "---".into() } else { format!("{:.1} dB", state.signal.snr_db) },
+                    Style::default().fg(if stale { theme.label } else { snr_color(state.signal.snr_db, theme) }),
                 ),
             ]),
             Line::from(vec![
                 Span::styled(format!("{:<15}", "Channel power"), lbl),
                 Span::styled(
-                    if state.channel_power_dbfs.is_finite() {
-                        format!("{:.1} dBFS", state.channel_power_dbfs)
+                    if state.signal.channel_power_dbfs.is_finite() {
+                        format!("{:.1} dBFS", state.signal.channel_power_dbfs)
                     } else {
                         "---".into()
                     },
@@ -77,7 +77,7 @@ impl Panel for SignalMetricsPanel {
             Line::from(vec![
                 Span::styled(format!("{:<15}", "Occupied BW"), lbl),
                 Span::styled(
-                    if state.occupied_bw_hz > 0 { fmt_bw(state.occupied_bw_hz) } else { "---".into() },
+                    if state.signal.occupied_bw_hz > 0 { fmt_bw(state.signal.occupied_bw_hz) } else { "---".into() },
                     val,
                 ),
             ]),

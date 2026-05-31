@@ -56,7 +56,7 @@ impl Panel for SpectrumPanel {
     }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
-        let stale = state.last_fft_frame.as_ref()
+        let stale = state.waterfall.last_fft.as_ref()
             .map(|fr| fr.timestamp.elapsed() > std::time::Duration::from_millis(500))
             .unwrap_or(false);
 
@@ -71,7 +71,7 @@ impl Panel for SpectrumPanel {
             Span::styled("e", key_style),
             Span::raw("ctrum"),
         ];
-        if state.spectrum_hold.is_some() {
+        if state.spectrum.hold.is_some() {
             title_spans.push(Span::styled(" [HOLD]", Style::default().fg(theme.status_warn)));
         }
         if stale {
@@ -80,7 +80,7 @@ impl Panel for SpectrumPanel {
         title_spans.push(Span::raw(" "));
         let title_line = Line::from(title_spans);
 
-        match state.last_fft_frame.as_ref() {
+        match state.waterfall.last_fft.as_ref() {
             None => {
                 f.render_widget(
                     Paragraph::new("Waiting for RX\u{2026}")
@@ -132,8 +132,8 @@ impl Panel for SpectrumPanel {
                 let right_hz   = frame.center_freq_hz as f64 + bw / 2.0;
 
                 // Dynamic y-range from state (user-controlled zoom)
-                let y_min_f = state.spectrum_y_min;
-                let y_max_f = state.spectrum_y_max;
+                let y_min_f = state.spectrum.y_min;
+                let y_max_f = state.spectrum.y_max;
                 let y_min   = y_min_f as f64;
                 let y_max   = y_max_f as f64;
 
@@ -151,18 +151,18 @@ impl Panel for SpectrumPanel {
                 let noise_floor_color = theme.noise_floor;
 
                 // Hold ghost: Arc clone, O(1)
-                let held_bins = state.spectrum_hold.clone();
+                let held_bins = state.spectrum.hold.clone();
                 let hold_color = theme.border_dim;
 
                 // Cursor: canvas x-coordinate (0..n-1)
-                let cursor_x_canvas = state.spectrum_cursor_freq.and_then(|cf| {
+                let cursor_x_canvas = state.spectrum.cursor_freq.and_then(|cf| {
                     let frac = (cf as f64 - left_hz) / bw;
                     if (0.0..=1.0).contains(&frac) { Some(frac * (n - 1.0)) } else { None }
                 });
                 let cursor_color = theme.value_hi;
 
                 // Marker canvas x-coordinates
-                let marker_xs: Vec<f64> = state.spectrum_markers.iter()
+                let marker_xs: Vec<f64> = state.spectrum.markers.iter()
                     .filter_map(|mk| {
                         let frac = (mk.freq_hz as f64 - left_hz) / bw;
                         if (0.0..=1.0).contains(&frac) { Some(frac * (n - 1.0)) } else { None }
@@ -171,14 +171,14 @@ impl Panel for SpectrumPanel {
                 let marker_color = theme.status_warn;
 
                 // Cursor power (read before closure)
-                let cursor_power: Option<f32> = state.spectrum_cursor_freq.and_then(|cf| {
+                let cursor_power: Option<f32> = state.spectrum.cursor_freq.and_then(|cf| {
                     let frac = (cf as f64 - left_hz) / bw;
                     if (0.0..=1.0).contains(&frac) {
                         let idx = (frac * (n_bins - 1) as f64).round() as usize;
                         Some(bins[idx.min(n_bins - 1)])
                     } else { None }
                 });
-                let cursor_freq_mhz = state.spectrum_cursor_freq
+                let cursor_freq_mhz = state.spectrum.cursor_freq
                     .map(|f| f as f64 / 1_000_000.0);
 
                 // ── Canvas ────────────────────────────────────────────────
@@ -265,7 +265,7 @@ impl Panel for SpectrumPanel {
                 // ── Marker labels (second row of canvas) ──────────────────
                 if canvas_area.height >= 3 {
                     let cw = canvas_area.width as f64;
-                    for mk in &state.spectrum_markers {
+                    for mk in &state.spectrum.markers {
                         let frac = (mk.freq_hz as f64 - left_hz) / bw;
                         if !(0.0..=1.0).contains(&frac) { continue; }
                         let col = (frac * cw) as u16;
@@ -300,8 +300,8 @@ impl Panel for SpectrumPanel {
 
                 // ── Tuning / cursor indicator (focus only) ────────────────
                 if let Some(ind_area) = indicator_area {
-                    let step_str  = fmt_spectrum_step(state.spectrum_step_hz);
-                    let freq_str  = format!("  {:.3} MHz  ", state.frequency as f64 / 1_000_000.0);
+                    let step_str  = fmt_spectrum_step(state.spectrum.step_hz);
+                    let freq_str  = format!("  {:.3} MHz  ", state.radio.frequency as f64 / 1_000_000.0);
 
                     let right_info: String = match (cursor_freq_mhz, cursor_power) {
                         (Some(cf), Some(pwr)) => format!("  cur: {:.3} MHz  {:.1} dBFS  step {}  J/K", cf, pwr, step_str),

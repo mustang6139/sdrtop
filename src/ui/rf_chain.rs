@@ -35,12 +35,12 @@ impl Panel for RfChainPanel {
         let inner = block.inner(area);
         f.render_widget(block, area);
 
-        let bb_bw = compute_bb_filter_bw(state.config_sample_rate);
-        let total_gain = state.lna_gain as i32
-            + state.vga_gain as i32
-            + if state.amp_enabled { 14 } else { 0 };
+        let bb_bw = compute_bb_filter_bw(state.radio.config_sample_rate);
+        let total_gain = state.radio.lna_gain as i32
+            + state.radio.vga_gain as i32
+            + if state.radio.amp_enabled { 14 } else { 0 };
 
-        let cpld_span = match state.cpld_ok {
+        let cpld_span = match state.system.cpld_ok {
             Some(true)  => Span::styled("OK",       Style::default().fg(theme.status_ok)),
             Some(false) => Span::styled("MISMATCH", Style::default().fg(theme.status_crit).add_modifier(Modifier::BOLD)),
             None        => Span::styled("n/a",      Style::default().fg(theme.label)),
@@ -53,11 +53,11 @@ impl Panel for RfChainPanel {
         let rows: &[Line] = &[
             Line::from(vec![
                 Span::styled(format!("{:<12}", "Frequency"), lbl),
-                Span::styled(format!("{:.3} MHz", state.frequency as f64 / 1_000_000.0), hi),
+                Span::styled(format!("{:.3} MHz", state.radio.frequency as f64 / 1_000_000.0), hi),
             ]),
             Line::from(vec![
                 Span::styled(format!("{:<12}", "Sample rate"), lbl),
-                Span::styled(format!("{:.1} Msps", state.config_sample_rate / 1_000_000.0), val),
+                Span::styled(format!("{:.1} Msps", state.radio.config_sample_rate / 1_000_000.0), val),
             ]),
             Line::from(vec![
                 Span::styled(format!("{:<12}", "BB filter"), lbl),
@@ -65,17 +65,17 @@ impl Panel for RfChainPanel {
             ]),
             Line::from(vec![
                 Span::styled(format!("{:<12}", "LNA gain"), lbl),
-                Span::styled(format!("{} dB", state.lna_gain), val),
+                Span::styled(format!("{} dB", state.radio.lna_gain), val),
             ]),
             Line::from(vec![
                 Span::styled(format!("{:<12}", "VGA gain"), lbl),
-                Span::styled(format!("{} dB", state.vga_gain), val),
+                Span::styled(format!("{} dB", state.radio.vga_gain), val),
             ]),
             Line::from(vec![
                 Span::styled(format!("{:<12}", "AMP"), lbl),
                 Span::styled(
-                    if state.amp_enabled { "ON  (+14 dB)" } else { "OFF" },
-                    if state.amp_enabled { Style::default().fg(theme.status_warn) } else { val },
+                    if state.radio.amp_enabled { "ON  (+14 dB)" } else { "OFF" },
+                    if state.radio.amp_enabled { Style::default().fg(theme.status_warn) } else { val },
                 ),
             ]),
             Line::from(vec![
@@ -85,15 +85,15 @@ impl Panel for RfChainPanel {
             Line::from(vec![Span::raw("")]),
             Line::from(vec![
                 Span::styled(format!("{:<12}", "Board"), lbl),
-                Span::styled(Device::board_rev_name(state.board_rev), val),
+                Span::styled(Device::board_rev_name(state.system.board_rev), val),
             ]),
             Line::from(vec![
                 Span::styled(format!("{:<12}", "Firmware"), lbl),
-                Span::styled(state.fw_version.clone(), val),
+                Span::styled(state.system.fw_version.clone(), val),
             ]),
             Line::from(vec![
                 Span::styled(format!("{:<12}", "USB API"), lbl),
-                Span::styled(format!("{:#06x}", state.usb_api_version), val),
+                Span::styled(format!("{:#06x}", state.system.usb_api_version), val),
             ]),
             Line::from(vec![
                 Span::styled(format!("{:<12}", "CPLD"), lbl),

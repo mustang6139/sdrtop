@@ -8,7 +8,7 @@ use ratatui::{
 use crate::state::SdrMetrics;
 
 pub fn render(f: &mut Frame, area: Rect, m: &SdrMetrics, theme: &crate::Theme) {
-    let log_lines: Vec<&str> = m.log.iter().map(|s| s.as_str()).collect();
+    let log_lines: Vec<&str> = m.ui.log.iter().map(|s| s.as_str()).collect();
     let log_text = log_lines.join("\n");
     let panel = Paragraph::new(log_text)
         .block(

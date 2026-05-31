@@ -13,11 +13,9 @@ No fluff, and definitely not a lazy wrapper around `hackrf_info`. It delivers ra
 
 ---
 
-## Pics
+## Video
 
-| ![](/docs/pics/main.png)      | ![](/docs/pics/spectrum.png)  |
-| ----------------------------- | ----------------------------- |
-| ![](/docs/pics/waterfall.png) | ![](/docs/pics/spec_watf.png) |
+![](/docs/pics/sdrtop.gif)
 
 ---
 

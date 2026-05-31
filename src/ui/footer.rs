@@ -15,33 +15,33 @@ impl Panel for FooterPanel {
     fn min_size(&self) -> (u16, u16) { (40, 3) }
 
     fn render(&self, f: &mut Frame, area: Rect, m: &SdrMetrics, theme: &crate::Theme, _focused: bool) {
-        let (text, border_color) = if m.observer_mode {
+        let (text, border_color) = if m.observer.active {
             (
                 " [Q] Quit  ·  [?] Help  (Observer Mode) ".to_string(),
                 theme.observer,
             )
         } else {
-            match m.input_mode {
+            match m.ui.input_mode {
                 InputMode::FrequencyInput => (
-                    format!(" Frequency (MHz): [{}▌]  [Enter] Confirm  [Esc] Cancel ", m.input_buf),
+                    format!(" Frequency (MHz): [{}▌]  [Enter] Confirm  [Esc] Cancel ", m.ui.input_buf),
                     theme.status_warn,
                 ),
                 InputMode::SampleRateInput => (
-                    format!(" Sample rate (2–20 MHz): [{}▌]  [Enter] Confirm  [Esc] Cancel ", m.input_buf),
+                    format!(" Sample rate (2–20 MHz): [{}▌]  [Enter] Confirm  [Esc] Cancel ", m.ui.input_buf),
                     theme.status_warn,
                 ),
                 InputMode::MarkerNameInput => {
-                    let freq_str = m.pending_marker_freq
+                    let freq_str = m.spectrum.pending_marker
                         .map(|f| format!("{:.3} MHz", f as f64 / 1_000_000.0))
                         .unwrap_or_default();
                     (
-                        format!(" Marker name at {}:  [{}▌]  [Enter] Confirm  [Esc] Cancel ", freq_str, m.input_buf),
+                        format!(" Marker name at {}:  [{}▌]  [Enter] Confirm  [Esc] Cancel ", freq_str, m.ui.input_buf),
                         theme.status_warn,
                     )
                 }
                 InputMode::Normal => {
-                    if let Some(panel_name) = &m.focused_panel {
-                        let mut parts: Vec<String> = m.focused_panel_bindings.iter()
+                    if let Some(panel_name) = &m.ui.focused_panel {
+                        let mut parts: Vec<String> = m.ui.focused_panel_bindings.iter()
                             .map(|(k, d)| format!("[{}] {}", k, d))
                             .collect();
                         parts.push("[Esc] Exit focus".to_string());

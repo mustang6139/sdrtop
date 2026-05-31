@@ -48,12 +48,12 @@ impl Panel for WaterfallPanel {
     }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
-        let buf = &state.waterfall;
-        let db_min  = state.waterfall_db_min;
-        let scroll  = state.waterfall_scroll_offset;
+        let buf = &state.waterfall.buffer;
+        let db_min  = state.waterfall.db_min;
+        let scroll  = state.waterfall.scroll_offset;
         let stride  = buf.row_stride;
 
-        let stale = state.last_fft_frame.as_ref()
+        let stale = state.waterfall.last_fft.as_ref()
             .map(|fr| fr.timestamp.elapsed() > std::time::Duration::from_millis(500))
             .unwrap_or(false);
         let border_color = if focused { theme.border_focused }
@@ -135,12 +135,12 @@ impl Panel for WaterfallPanel {
         if cols == 0 { return; }
 
         // Frequency bounds from last FFT frame (for cursor mapping)
-        let (left_hz, bw) = state.last_fft_frame.as_ref()
+        let (left_hz, bw) = state.waterfall.last_fft.as_ref()
             .map(|fr| (fr.center_freq_hz as f64 - fr.sample_rate / 2.0, fr.sample_rate))
             .unwrap_or((0.0, 1.0));
 
         // Cursor column in display space
-        let cursor_col: Option<usize> = state.waterfall_cursor_freq.and_then(|cf| {
+        let cursor_col: Option<usize> = state.waterfall.cursor_freq.and_then(|cf| {
             let frac = (cf as f64 - left_hz) / bw;
             if (0.0..=1.0).contains(&frac) {
                 Some(((frac * cols as f64) as usize).min(cols - 1))
@@ -234,7 +234,7 @@ impl Panel for WaterfallPanel {
 
         // ── Indicator row (focus only) ─────────────────────────────────
         if let Some(ind_area) = indicator_area {
-            let right_info: String = if let Some(cf) = state.waterfall_cursor_freq {
+            let right_info: String = if let Some(cf) = state.waterfall.cursor_freq {
                 // Cursor active: show freq, dBFS at top visible row, time ago
                 let freq_mhz = cf as f64 / 1_000_000.0;
                 let (db_at_cursor, secs_ago) = buf.rows.iter().skip(skip).next()
@@ -255,7 +255,7 @@ impl Panel for WaterfallPanel {
                     format!("  cur: {:.3} MHz  ← →  M", freq_mhz)
                 }
             } else {
-                let step_str = fmt_spectrum_step(state.spectrum_step_hz);
+                let step_str = fmt_spectrum_step(state.spectrum.step_hz);
                 format!("  ×{}  frames/row  [ ]  M cursor  step {}  ↑↓ zoom  J/K scroll", stride, step_str)
             };
 

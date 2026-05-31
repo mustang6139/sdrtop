@@ -1,0 +1,19 @@
+use std::collections::VecDeque;
+use std::time::Instant;
+
+#[derive(Clone)]
+pub struct RadioState {
+    pub frequency:           u64,
+    pub config_sample_rate:  f64,
+    pub actual_sample_rate:  u32,
+    pub lna_gain:            u32,
+    pub vga_gain:            u32,
+    pub amp_enabled:         bool,
+    pub rx_enabled:          bool,
+    pub hw_streaming:        bool,
+    pub bytes_since_last_poll: u64,
+    pub last_poll_time:      Instant,
+    pub current_throughput_bps: u64,
+    pub throughput_history:  VecDeque<u64>,
+    pub sample_rate_history: VecDeque<u64>,
+}

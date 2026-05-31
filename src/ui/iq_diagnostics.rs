@@ -28,7 +28,7 @@ impl Panel for IqDiagnosticsPanel {
     fn min_size(&self) -> (u16, u16) { (30, 6) }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
-        let stale = !state.hw_streaming && !state.observer_mode;
+        let stale = !state.radio.hw_streaming && !state.observer.active;
         let title = if stale { " IQ Diagnostics [STALE] " } else { " IQ Diagnostics " };
         let border_color = if focused { theme.border_focused }
             else if stale { theme.stale }
@@ -63,29 +63,29 @@ impl Panel for IqDiagnosticsPanel {
             return;
         }
 
-        let max_offset = state.dc_offset_i.abs().max(state.dc_offset_q.abs());
+        let max_offset = state.iq.dc_offset_i.abs().max(state.iq.dc_offset_q.abs());
         f.render_widget(
             Paragraph::new(Span::styled(
                 format!(
                     "DC offset  I: {:+.4}  Q: {:+.4}",
-                    state.dc_offset_i, state.dc_offset_q
+                    state.iq.dc_offset_i, state.iq.dc_offset_q
                 ),
                 Style::default().fg(offset_color(max_offset, theme)),
             )),
             rows[0],
         );
 
-        let abs_imbalance = state.iq_imbalance_db.abs();
+        let abs_imbalance = state.iq.iq_imbalance_db.abs();
         f.render_widget(
             Paragraph::new(Span::styled(
-                format!("IQ imbalance: {:+.2} dB", state.iq_imbalance_db),
+                format!("IQ imbalance: {:+.2} dB", state.iq.iq_imbalance_db),
                 Style::default().fg(imbalance_color(abs_imbalance, theme)),
             )),
             rows[1],
         );
 
         let hint = if abs_imbalance < 1.0        { "OK — channels balanced" }
-            else if state.iq_imbalance_db > 0.0  { "I channel stronger" }
+            else if state.iq.iq_imbalance_db > 0.0  { "I channel stronger" }
             else                                  { "Q channel stronger" };
         f.render_widget(
             Paragraph::new(Span::styled(

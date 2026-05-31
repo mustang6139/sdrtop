@@ -34,7 +34,7 @@ impl Panel for IqHistogramPanel {
         let chart_area = layout[0];
         let label_area = layout[1];
 
-        let hist = &state.iq_amplitude_hist;
+        let hist = &state.iq.iq_amplitude_hist;
         let total: u64 = hist.iter().sum();
         let max_count = hist.iter().copied().max().unwrap_or(1).max(1);
         let bar_height = chart_area.height as usize;
