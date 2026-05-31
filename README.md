@@ -14,7 +14,7 @@ I didn't want to cut corners, so this definitely isn't a lazy `hackrf_info` clon
 > [!IMPORTANT]
 > **Project Status:** `sdrtop` is currently in an **early development stage**. 
 > * At the moment, **it only supports the HackRF One**. Support for other devices is planned.
-> * **Known Issues: **Plenty 😄... You might run into some performance issues.
+> * **Known Issues:** Plenty 😄... You might run into some performance issues.
 
 **[Full user guide](user_docs/README.md)**
 
