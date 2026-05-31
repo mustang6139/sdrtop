@@ -15,7 +15,7 @@ No fluff, and definitely not a lazy wrapper around `hackrf_info`. It delivers ra
 
 ## Video
 
-![](/docs/pics/sdrtop.gif)
+![](/dev_docs/pics/sdrtop.gif)
 
 ---
 
@@ -33,12 +33,9 @@ No fluff, and definitely not a lazy wrapper around `hackrf_info`. It delivers ra
 
 ---
 
-## Requirements
+## Quick start
 
-- Linux
-- HackRF One
-- `libhackrf` + `pkg-config`
-- Rust stable
+**Requirements:** Linux · HackRF One · `libhackrf` + `pkg-config` · Rust stable
 
 ```sh
 # Arch
@@ -48,52 +45,36 @@ sudo pacman -S hackrf pkgconf
 sudo apt install libhackrf-dev pkg-config
 ```
 
-## Build & run
-
 ```sh
 cargo build --release
 ./target/release/sdrtop
 ```
 
-```sh
-# Common options
-sdrtop --frequency 92800000     # center frequency in Hz
-sdrtop --lna 24 --vga 30        # initial gain settings
-sdrtop --theme nord              # built-in theme
-sdrtop --config ~/my.toml       # custom config path
-```
+Press `Space` to start receiving. Press `?` for the key reference. Press `q` to quit and save.
+
+→ **[Full user guide](user_docs/README.md)**
 
 ---
 
 ## Keys
 
-| Key | Action |
-|---|---|
-| `Space` | Start / stop RX |
-| `↑` / `↓` | LNA gain ±8 dB |
-| `[` / `]` | VGA gain ±2 dB |
-| `a` | Toggle RF amplifier |
-| `f` | Enter frequency (MHz) |
-| `s` | Enter sample rate (2–20 MHz) |
-| `r` | Reset all settings to defaults |
-| `w` | Pause / resume waterfall |
-| `h` | Hold / unhold spectrum frame |
-| `e` | Focus spectrum panel |
-| `1`–`6` | Switch layout preset |
-| `p` | Cycle presets |
-| `?` | Help overlay |
-| `q` | Quit and save config |
-
-### Spectrum focus mode (`e`)
-
-| Key | Action |
-|---|---|
-| `←` / `→` | Tune center frequency by step |
-| `[` / `]` | Step size (1 kHz → 10 MHz) |
-| `↑` / `↓` | Zoom y-axis (±10 dB per step) |
-| `j` / `k` | Move cursor left / right |
-| `m` | Place or remove a named marker |
-| `Esc` | Exit focus |
+| Key       | Action                         |
+| --------- | ------------------------------ |
+| `Space`   | Start / stop RX                |
+| `↑` / `↓` | LNA gain ±8 dB                 |
+| `[` / `]` | VGA gain ±2 dB                 |
+| `a`       | Toggle RF amplifier            |
+| `f`       | Enter frequency (MHz)          |
+| `s`       | Enter sample rate (2–20 MHz)   |
+| `r`       | Reset all settings to defaults |
+| `w`       | Pause / resume waterfall       |
+| `h`       | Hold / unhold spectrum frame   |
+| `e`       | Focus spectrum panel           |
+| `l`       | Focus waterfall panel          |
+| `1`–`6`   | Switch layout preset           |
+| `p`       | Cycle presets                  |
+| `?`       | Help overlay                   |
+| `q`       | Quit and save config           |
 
 ---
 
@@ -145,35 +126,6 @@ Available themes: `sdr` (default) · `nord` · `dracula` · `gruvbox` · `catppu
 
 ---
 
-## Roadmap
-
-### What's possible with current hardware
-
-| Phase | Milestone | Status |
-|---|---|---|
-| 1–11 | Core pipeline: FFT · waterfall · HackRF diagnostics · theme engine foundation | ✅ Done |
-| 12 | UI/UX polish — full theme system, rounded panels, header/footer redesign, panel focus | 🔧 In progress |
-| 13 | Hardware abstraction layer — `SdrDevice` trait, HackRF refactored as first backend | 🔲 Next |
-| 14 | PortaPack / Mayhem — telemetry panel via Mayhem's serial interface | 🔲 Planned |
-| 15 | HackRF feature pass — frequency bookmarks, IQ recording (SigMF), scan mode | 🔲 Planned |
-| 16 | Polish — mouse support, terminal resize, panic recovery, performance profiling | 🔲 Planned |
-| 17 | Distribution — AUR, CI, Nix flake, man page, `CONTRIBUTING.md` | 🔲 Planned |
-
-### When hardware arrives
-
-| Phase | Milestone | Hardware needed |
-|---|---|---|
-| 18 | RTL-SDR support — tuner detection, AGC, PPM correction | RTL-SDR dongle (~€25) |
-| 19 | Airspy / Airspy HF+ — sensitivity presets, bias-T, HF diagnostics | Airspy Mini / HF+ (~€80–150) |
-| 20 | SoapySDR backend — LimeSDR, bladeRF, SDRplay, PlutoSDR, USRP | Various |
-| 21 | Multi-device — simultaneous monitoring, side-by-side spectrum | ≥2 different devices |
-| 22 | Advanced UI — constellation display, demodulation preview, custom layouts | — |
-| 23 | Community & ecosystem | — |
-
-Full technical detail: [docs/Roadmap.md](docs/Roadmap.md)
-
----
-
 ## Supporting the project
 
 `sdrtop` is built to support every SDR device out there, but that requires actually owning them. Right now development runs on a HackRF One and a PortaPack H4M. The next device on the list is an **RTL-SDR dongle**, which I'm buying myself - it's the most common SDR hardware in the world and the most impactful single addition this project can make.
@@ -197,4 +149,4 @@ No pressure, but if this scratches an itch for you, this is where it goes.
 
 Phase 11 complete · Phase 12 in progress. Running on real hardware. Next: finish UI polish, then hardware abstraction layer.
 
-→ [Roadmap](docs/Roadmap.md) · [Changelog](docs/CHANGELOG.md) · [Docs](docs/Home.md) · [Credits](CREDITS.md)
+→ [User guide](user_docs/README.md) · [What's new](user_docs/whats-new.md) · [Roadmap](dev_docs/Roadmap.md) · [Changelog](dev_docs/CHANGELOG.md) · [Developer docs](dev_docs/Home.md)

@@ -46,7 +46,7 @@ Each bug has its own detailed file; this document is the index.
 
 ## How to add a new entry
 
-1. Create `docs/bugs/bug-NNN-short-description.md` using the template below.
+1. Create `dev_docs/bugs/bug-NNN-short-description.md` using the template below.
 2. Add a row to the appropriate section above (or create a new section).
 3. If the fix involves a code change, reference the relevant file and line number.
 

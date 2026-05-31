@@ -25,7 +25,7 @@ Not bugs, not roadmap items — just polish, missing features, and practical gap
 
 ## How to add a new entry
 
-1. Create `docs/improvements/imp-NNN-short-description.md` using the template below.
+1. Create `dev_docs/improvements/imp-NNN-short-description.md` using the template below.
 2. Add a row to the table above.
 3. Add an entry to [CHANGELOG.md](../CHANGELOG.md) under the relevant date.
 4. Update the improvements count in [Home.md](../Home.md) header line.
