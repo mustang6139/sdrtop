@@ -28,6 +28,10 @@ pub extern "C" fn rx_callback(transfer: *mut hackrf_transfer) -> c_int {
 
 fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
     unsafe {
+        // Capture timestamp immediately — jitter measures true inter-callback interval,
+        // not callback-entry-plus-processing-time.
+        let now = std::time::Instant::now();
+
         if transfer.is_null() { return 0; }
         let t = &*transfer;
         let ctx_ptr = t.rx_ctx as *const RxContext;
@@ -78,8 +82,6 @@ fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
         }
 
         let pairs = (buf.len() / 2) as u64;
-        // Timestamp before the lock so jitter measures true inter-callback interval.
-        let now = std::time::Instant::now();
 
         // Single brief lock to flush accumulated results — O(1), no loops inside.
         {
