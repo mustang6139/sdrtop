@@ -33,7 +33,7 @@ pub fn spawn_rx_task(
 
             // Lock block 1: snapshot + reset accumulators, do integer computations.
             // Floating-point transcendentals (sqrt, log10, asin) run outside the lock.
-            let (acc_saturated, acc_i_sum, acc_q_sum, acc_i_sq_sum, acc_q_sq_sum,
+            let (acc_i_sum, acc_q_sum, acc_i_sq_sum, acc_q_sq_sum,
                  acc_cross_sum, acc_samples, acc_jitter_sum, acc_jitter_sq, acc_jitter_cnt) = {
                 let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
                 let elapsed_ms = now.duration_since(m.radio.last_poll_time).as_millis() as u64;
@@ -112,7 +112,7 @@ pub fn spawn_rx_task(
                     rx_ctx.sample_tx.len() as f32 / cap as f32 * 100.0
                 } else { 0.0 };
 
-                (acc_saturated, acc_i_sum, acc_q_sum, acc_i_sq_sum, acc_q_sq_sum,
+                (acc_i_sum, acc_q_sum, acc_i_sq_sum, acc_q_sq_sum,
                  acc_cross_sum, acc_samples, acc_jitter_sum, acc_jitter_sq, acc_jitter_cnt)
             };
 
