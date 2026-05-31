@@ -98,21 +98,24 @@ pub fn spawn_rx_task(
                 m.signal.saturation_history.push_back(sat_snapshot);
 
                 if acc_samples > 0 {
-                    let n = acc_samples as f64;
-                    m.iq.dc_offset_i = (acc_i_sum as f64 / n / 128.0) as f32;
-                    m.iq.dc_offset_q = (acc_q_sum as f64 / n / 128.0) as f32;
-                    let i_rms = (acc_i_sq_sum as f64 / n).sqrt();
-                    let q_rms = (acc_q_sq_sum as f64 / n).sqrt();
-                    if q_rms > 0.0 {
-                        m.iq.iq_imbalance_db = (20.0 * (i_rms / q_rms).log10()) as f32;
-                    }
-                    // Phase imbalance: sin(θ) = 2·cov(I,Q) / (var(I) + var(Q))
-                    // Use mean-subtracted values to avoid DC-bias distortion.
+                    let n      = acc_samples as f64;
                     let mean_i = acc_i_sum as f64 / n;
                     let mean_q = acc_q_sum as f64 / n;
-                    let cov_iq = acc_cross_sum as f64 / n - mean_i * mean_q;
                     let var_i  = (acc_i_sq_sum as f64 / n - mean_i * mean_i).max(0.0);
                     let var_q  = (acc_q_sq_sum as f64 / n - mean_q * mean_q).max(0.0);
+
+                    m.iq.dc_offset_i = (mean_i / 128.0) as f32;
+                    m.iq.dc_offset_q = (mean_q / 128.0) as f32;
+
+                    // Amplitude imbalance: AC RMS ratio (DC-subtracted stddev)
+                    let i_ac = var_i.sqrt();
+                    let q_ac = var_q.sqrt();
+                    if q_ac > 0.0 {
+                        m.iq.iq_imbalance_db = (20.0 * (i_ac / q_ac).log10()) as f32;
+                    }
+
+                    // Phase imbalance: sin(θ) = 2·cov(I,Q) / (var(I) + var(Q))
+                    let cov_iq = acc_cross_sum as f64 / n - mean_i * mean_q;
                     let denom  = var_i + var_q;
                     if denom > 0.0 {
                         let sin_theta = (2.0 * cov_iq / denom).clamp(-1.0, 1.0);
