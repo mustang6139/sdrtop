@@ -47,6 +47,7 @@ extern "C" {
     ) -> c_int;
     pub fn hackrf_is_streaming(device: *mut c_void) -> c_int;
     pub fn hackrf_set_sample_rate(device: *mut c_void, freq_hz: f64) -> c_int;
+    pub fn hackrf_set_baseband_filter_bandwidth(device: *mut c_void, bandwidth_hz: u32) -> c_int;
     pub fn hackrf_set_freq(device: *mut c_void, freq_hz: u64) -> c_int;
     pub fn hackrf_set_amp_enable(device: *mut c_void, value: u8) -> c_int;
     pub fn hackrf_start_rx(

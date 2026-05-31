@@ -74,9 +74,13 @@ impl App {
         let cpld_ok: Option<bool> = None;
         let theme        = cfg.build_theme();
 
+        let (sr_result, bb_filter_hz) = match device.set_sample_rate(cfg.radio.sample_rate) {
+            Ok(bw)  => (Ok(()), bw),
+            Err(e)  => (Err(e), hardware::compute_bb_filter_bw(cfg.radio.sample_rate)),
+        };
         let startup_results = [
             device.set_frequency(cfg.radio.frequency_hz),
-            device.set_sample_rate(cfg.radio.sample_rate),
+            sr_result,
             device.set_lna_gain(cfg.radio.lna_gain),
             device.set_vga_gain(cfg.radio.vga_gain),
             device.set_amp_enable(cfg.radio.amp_enabled),
@@ -87,6 +91,7 @@ impl App {
                 frequency:           cfg.radio.frequency_hz,
                 config_sample_rate:  cfg.radio.sample_rate,
                 actual_sample_rate:  0,
+                bb_filter_hz,
                 lna_gain:            cfg.radio.lna_gain,
                 vga_gain:            cfg.radio.vga_gain,
                 amp_enabled:         cfg.radio.amp_enabled,
@@ -182,6 +187,7 @@ impl App {
                 frequency:           cfg.radio.frequency_hz,
                 config_sample_rate:  cfg.radio.sample_rate,
                 actual_sample_rate:  0,
+                bb_filter_hz:        hardware::compute_bb_filter_bw(cfg.radio.sample_rate),
                 lna_gain:            cfg.radio.lna_gain,
                 vga_gain:            cfg.radio.vga_gain,
                 amp_enabled:         cfg.radio.amp_enabled,

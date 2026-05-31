@@ -6,6 +6,7 @@ pub struct RadioState {
     pub frequency:           u64,
     pub config_sample_rate:  f64,
     pub actual_sample_rate:  u32,
+    pub bb_filter_hz:        u32,
     pub lna_gain:            u32,
     pub vga_gain:            u32,
     pub amp_enabled:         bool,

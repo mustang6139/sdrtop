@@ -273,16 +273,21 @@ fn handle_global(
         KeyCode::Char('r') => {
             use crate::state::{DEFAULT_FREQUENCY, DEFAULT_LNA_GAIN, DEFAULT_SAMPLE_RATE, DEFAULT_VGA_GAIN};
             if let Some(device) = device {
+                let (sr_result, bb_bw) = match device.set_sample_rate(DEFAULT_SAMPLE_RATE) {
+                    Ok(bw) => (Ok(()), bw),
+                    Err(e) => (Err(e), crate::hardware::compute_bb_filter_bw(DEFAULT_SAMPLE_RATE)),
+                };
                 let results = [
                     device.set_lna_gain(DEFAULT_LNA_GAIN),
                     device.set_vga_gain(DEFAULT_VGA_GAIN),
                     device.set_frequency(DEFAULT_FREQUENCY),
-                    device.set_sample_rate(DEFAULT_SAMPLE_RATE),
+                    sr_result,
                     device.set_amp_enable(false),
                 ];
                 let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
                 if results.iter().all(|r| r.is_ok()) {
                     m.reset_to_defaults();
+                    m.radio.bb_filter_hz = bb_bw;
                 } else {
                     for r in &results {
                         if let Err(e) = r { m.push_log(format!("Reset error: {}", e)); }
@@ -514,8 +519,9 @@ fn handle_sr_input(
                 };
                 let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
                 match (rate_hz, result) {
-                    (Some(hz), Some(Ok(()))) => {
+                    (Some(hz), Some(Ok(bw))) => {
                         m.radio.config_sample_rate = hz;
+                        m.radio.bb_filter_hz = bw;
                         m.ui.input_mode = InputMode::Normal;
                         m.ui.input_buf.clear();
                         m.push_log(format!("Sample rate set to {:.1} MHz", hz / 1_000_000.0));

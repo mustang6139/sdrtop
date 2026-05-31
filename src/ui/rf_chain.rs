@@ -6,7 +6,6 @@ use ratatui::{
     Frame,
 };
 
-use crate::hardware::device::compute_bb_filter_bw;
 use crate::hardware::Device;
 use crate::state::SdrMetrics;
 use crate::ui::panel::Panel;
@@ -53,7 +52,7 @@ impl Panel for RfChainPanel {
         let inner = block.inner(area);
         f.render_widget(block, area);
 
-        let bb_bw = compute_bb_filter_bw(state.radio.config_sample_rate);
+        let bb_bw = state.radio.bb_filter_hz;
         let total_gain = state.radio.lna_gain as i32
             + state.radio.vga_gain as i32
             + if state.radio.amp_enabled { 14 } else { 0 };

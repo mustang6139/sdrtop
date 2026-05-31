@@ -45,13 +45,25 @@ I didn't want to cut corners, so this definitely isn't a lazy `hackrf_info` clon
 
 **Requirements:** Linux · HackRF One · `libhackrf` + `pkg-config` · Rust stable
 
+### Arch
+
 ```sh
 # Arch
-sudo pacman -S hackrf pkgconf
+sudo pacman -S hackrf pkgconf rust
+```
+### Debian / Ubuntu
 
-# Debian / Ubuntu
+```sh
 sudo apt install libhackrf-dev pkg-config
 ```
+
+You also need Rust installed. If you don't have it yet:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+### Then build:
 
 ```sh
 cargo build --release

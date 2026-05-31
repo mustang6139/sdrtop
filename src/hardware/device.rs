@@ -334,13 +334,19 @@ impl Device {
         Ok(())
     }
 
-    pub fn set_sample_rate(&self, sample_rate: f64) -> anyhow::Result<()> {
+    /// Sets sample rate and explicitly programs the nearest valid BB filter BW.
+    /// Returns the filter bandwidth that was applied.
+    pub fn set_sample_rate(&self, sample_rate: f64) -> anyhow::Result<u32> {
+        let bw = compute_bb_filter_bw(sample_rate);
         unsafe {
             if hackrf_set_sample_rate(self.0, sample_rate) != 0 {
                 anyhow::bail!("Failed to set sample rate");
             }
+            if hackrf_set_baseband_filter_bandwidth(self.0, bw) != 0 {
+                anyhow::bail!("Failed to set baseband filter bandwidth");
+            }
         }
-        Ok(())
+        Ok(bw)
     }
 
     pub fn set_frequency(&self, freq_hz: u64) -> anyhow::Result<()> {
