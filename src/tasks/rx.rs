@@ -106,9 +106,16 @@ pub fn spawn_rx_task(
                     if q_rms > 0.0 {
                         m.iq.iq_imbalance_db = (20.0 * (i_rms / q_rms).log10()) as f32;
                     }
-                    let power = acc_i_sq_sum as f64 + acc_q_sq_sum as f64;
-                    if power > 0.0 {
-                        let sin_theta = (2.0 * acc_cross_sum as f64 / power).clamp(-1.0, 1.0);
+                    // Phase imbalance: sin(θ) = 2·cov(I,Q) / (var(I) + var(Q))
+                    // Use mean-subtracted values to avoid DC-bias distortion.
+                    let mean_i = acc_i_sum as f64 / n;
+                    let mean_q = acc_q_sum as f64 / n;
+                    let cov_iq = acc_cross_sum as f64 / n - mean_i * mean_q;
+                    let var_i  = (acc_i_sq_sum as f64 / n - mean_i * mean_i).max(0.0);
+                    let var_q  = (acc_q_sq_sum as f64 / n - mean_q * mean_q).max(0.0);
+                    let denom  = var_i + var_q;
+                    if denom > 0.0 {
+                        let sin_theta = (2.0 * cov_iq / denom).clamp(-1.0, 1.0);
                         m.iq.phase_imbalance_deg = (sin_theta.asin() * 180.0 / std::f64::consts::PI) as f32;
                     }
                 }
