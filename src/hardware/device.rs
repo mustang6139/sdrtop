@@ -67,16 +67,18 @@ fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
             let mut q_sum: i64 = 0;
             let mut i_sq: i64 = 0;
             let mut q_sq: i64 = 0;
+            let mut iq_cross: i64 = 0;
 
             for chunk in buf.chunks_exact(2) {
                 let i_byte = chunk[0] as i8;
                 let q_byte = chunk[1] as i8;
                 let i = i_byte as i64;
                 let q = q_byte as i64;
-                i_sum += i;
-                q_sum += q;
-                i_sq  += i * i;
-                q_sq  += q * q;
+                i_sum    += i;
+                q_sum    += q;
+                i_sq     += i * i;
+                q_sq     += q * q;
+                iq_cross += i * q;
                 if chunk[0] == 0x80 || chunk[0] == 0x7F { saturated += 1; }
                 if chunk[1] == 0x80 || chunk[1] == 0x7F { saturated += 1; }
                 // IQ amplitude histogram: Chebyshev distance, 32 bins of width 4.
@@ -87,12 +89,13 @@ fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
             }
 
             let pairs = (buf.len() / 2) as u64;
-            m.acc.saturated    += saturated;
-            m.acc.i_sum        += i_sum;
-            m.acc.q_sum        += q_sum;
-            m.acc.i_sq_sum     += i_sq as u64;
-            m.acc.q_sq_sum     += q_sq as u64;
-            m.acc.sample_count += pairs;
+            m.acc.saturated     += saturated;
+            m.acc.i_sum         += i_sum;
+            m.acc.q_sum         += q_sum;
+            m.acc.i_sq_sum      += i_sq as u64;
+            m.acc.q_sq_sum      += q_sq as u64;
+            m.acc.iq_cross_sum  += iq_cross;
+            m.acc.sample_count  += pairs;
 
             let now = std::time::Instant::now();
             if let Some(last) = m.acc.last_callback {

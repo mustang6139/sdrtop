@@ -13,6 +13,7 @@ pub(crate) struct Accumulators {
     pub sample_count:  u64,
     pub jitter_sum_us: u64,
     pub jitter_count:  u64,
+    pub iq_cross_sum:  i64,
     pub last_callback: Option<Instant>,
     pub iq_hist:       [u64; 32],
 }

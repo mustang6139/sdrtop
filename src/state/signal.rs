@@ -11,5 +11,7 @@ pub struct SignalState {
     pub snr_db:              f32,
     pub channel_power_dbfs:  f32,
     pub occupied_bw_hz:      u64,
-    pub usb_errors_session:  u64,
+    pub usb_errors_session:   u64,
+    pub usb_errors_last_poll: u64,
+    pub usb_error_history:    std::collections::VecDeque<u64>,
 }

@@ -64,6 +64,7 @@ pub fn spawn_rx_task(
                 let acc_q_sum      = m.acc.q_sum;
                 let acc_i_sq_sum   = m.acc.i_sq_sum;
                 let acc_q_sq_sum   = m.acc.q_sq_sum;
+                let acc_cross_sum  = m.acc.iq_cross_sum;
                 let acc_samples    = m.acc.sample_count;
                 let acc_jitter_sum = m.acc.jitter_sum_us;
                 let acc_jitter_cnt = m.acc.jitter_count;
@@ -73,6 +74,7 @@ pub fn spawn_rx_task(
                 m.acc.q_sum         = 0;
                 m.acc.i_sq_sum      = 0;
                 m.acc.q_sq_sum      = 0;
+                m.acc.iq_cross_sum  = 0;
                 m.acc.sample_count  = 0;
                 m.acc.jitter_sum_us = 0;
                 m.acc.jitter_count  = 0;
@@ -102,7 +104,20 @@ pub fn spawn_rx_task(
                     if q_rms > 0.0 {
                         m.iq.iq_imbalance_db = (20.0 * (i_rms / q_rms).log10()) as f32;
                     }
+                    let power = acc_i_sq_sum as f64 + acc_q_sq_sum as f64;
+                    if power > 0.0 {
+                        let sin_theta = (2.0 * acc_cross_sum as f64 / power).clamp(-1.0, 1.0);
+                        m.iq.phase_imbalance_deg = (sin_theta.asin() * 180.0 / std::f64::consts::PI) as f32;
+                    }
                 }
+
+                let usb_now = m.signal.usb_errors_session;
+                let usb_delta = usb_now.saturating_sub(m.signal.usb_errors_last_poll);
+                m.signal.usb_errors_last_poll = usb_now;
+                if m.signal.usb_error_history.len() >= crate::state::THROUGHPUT_HISTORY_LEN {
+                    m.signal.usb_error_history.pop_front();
+                }
+                m.signal.usb_error_history.push_back(usb_delta);
 
                 if let Some(jitter) = acc_jitter_sum.checked_div(acc_jitter_cnt) {
                     m.iq.callback_jitter_us = jitter;

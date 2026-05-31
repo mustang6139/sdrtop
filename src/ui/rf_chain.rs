@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::{Block, BorderType, Borders, Gauge, Paragraph},
     Frame,
 };
 
@@ -21,9 +21,27 @@ fn fmt_hz(hz: u32) -> String {
     }
 }
 
+fn gain_advice(hist: &[u64; 32]) -> (&'static str, bool) {
+    let total: u64 = hist.iter().sum();
+    if total == 0 { return ("no signal — start RX", false); }
+    let low:  u64 = hist[..8].iter().sum();
+    let high: u64 = hist[24..].iter().sum();
+    let low_pct  = low  * 100 / total;
+    let high_pct = high * 100 / total;
+    if high_pct > 10 {
+        ("⬇ clipping — reduce gain", true)
+    } else if low_pct > 90 {
+        ("⬆ weak — increase LNA +8 dB", false)
+    } else if low_pct > 70 {
+        ("⬆ under-utilised — try +8 dB", false)
+    } else {
+        ("✓ gain staging OK", false)
+    }
+}
+
 impl Panel for RfChainPanel {
     fn name(&self) -> &'static str { "rf_chain" }
-    fn min_size(&self) -> (u16, u16) { (32, 12) }
+    fn min_size(&self) -> (u16, u16) { (32, 10) }
 
     fn render(&self, f: &mut Frame, area: ratatui::layout::Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         let border_color = if focused { theme.border_focused } else { theme.border_default };
@@ -46,71 +64,77 @@ impl Panel for RfChainPanel {
             None        => Span::styled("n/a",      Style::default().fg(theme.label)),
         };
 
-        let lbl = Style::default().fg(theme.label);
-        let val = Style::default().fg(theme.value);
-        let hi  = Style::default().fg(theme.value_hi);
+        let lbl  = Style::default().fg(theme.label);
+        let val  = Style::default().fg(theme.value);
+        let hi   = Style::default().fg(theme.value_hi);
 
-        let rows: &[Line] = &[
+        let (advice_text, is_warn) = gain_advice(&state.iq.iq_amplitude_hist);
+        let advice_color = if is_warn { theme.status_crit } else { theme.status_ok };
+
+        // ADC utilisation gauge: fraction of samples in mid-range bins (8–23)
+        let total: u64 = state.iq.iq_amplitude_hist.iter().sum();
+        let mid: u64   = state.iq.iq_amplitude_hist[8..24].iter().sum();
+        let util_ratio = if total > 0 { mid as f64 / total as f64 } else { 0.0 };
+        let util_color = if util_ratio > 0.5 { theme.status_ok }
+            else if util_ratio > 0.2         { theme.status_warn }
+            else                             { theme.status_crit };
+
+        let info_rows: &[Line] = &[
             Line::from(vec![
-                Span::styled(format!("{:<12}", "Frequency"), lbl),
-                Span::styled(format!("{:.3} MHz", state.radio.frequency as f64 / 1_000_000.0), hi),
-            ]),
-            Line::from(vec![
-                Span::styled(format!("{:<12}", "Sample rate"), lbl),
-                Span::styled(format!("{:.1} Msps", state.radio.config_sample_rate / 1_000_000.0), val),
-            ]),
-            Line::from(vec![
-                Span::styled(format!("{:<12}", "BB filter"), lbl),
+                Span::styled(format!("{:<13}", "BB filter"),  lbl),
                 Span::styled(fmt_hz(bb_bw), val),
             ]),
             Line::from(vec![
-                Span::styled(format!("{:<12}", "LNA gain"), lbl),
-                Span::styled(format!("{} dB", state.radio.lna_gain), val),
-            ]),
-            Line::from(vec![
-                Span::styled(format!("{:<12}", "VGA gain"), lbl),
-                Span::styled(format!("{} dB", state.radio.vga_gain), val),
-            ]),
-            Line::from(vec![
-                Span::styled(format!("{:<12}", "AMP"), lbl),
-                Span::styled(
-                    if state.radio.amp_enabled { "ON  (+14 dB)" } else { "OFF" },
-                    if state.radio.amp_enabled { Style::default().fg(theme.status_warn) } else { val },
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(format!("{:<12}", "Total gain"), lbl),
+                Span::styled(format!("{:<13}", "Total gain"), lbl),
                 Span::styled(format!("{} dB", total_gain), hi),
             ]),
             Line::from(vec![Span::raw("")]),
             Line::from(vec![
-                Span::styled(format!("{:<12}", "Board"), lbl),
+                Span::styled(format!("{:<13}", "Board"),   lbl),
                 Span::styled(Device::board_rev_name(state.system.board_rev), val),
             ]),
             Line::from(vec![
-                Span::styled(format!("{:<12}", "Firmware"), lbl),
-                Span::styled(state.system.fw_version.clone(), val),
-            ]),
-            Line::from(vec![
-                Span::styled(format!("{:<12}", "USB API"), lbl),
+                Span::styled(format!("{:<13}", "USB API"), lbl),
                 Span::styled(format!("{:#06x}", state.system.usb_api_version), val),
             ]),
             Line::from(vec![
-                Span::styled(format!("{:<12}", "CPLD"), lbl),
+                Span::styled(format!("{:<13}", "CPLD"),    lbl),
                 cpld_span,
+            ]),
+            Line::from(vec![Span::raw("")]),
+            Line::from(vec![
+                Span::styled(advice_text, Style::default().fg(advice_color)),
             ]),
         ];
 
-        let n = rows.len().min(inner.height as usize);
-        if n == 0 { return; }
-        let constraints: Vec<Constraint> = (0..n).map(|_| Constraint::Length(1)).collect();
-        let row_areas = Layout::default()
+        // Reserve 2 rows at the bottom for the ADC utilisation gauge
+        let n_info = info_rows.len().min(inner.height.saturating_sub(2) as usize);
+        if inner.height < 3 { return; }
+
+        let sections = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(constraints)
+            .constraints([
+                Constraint::Length(n_info as u16),
+                Constraint::Min(0),
+                Constraint::Length(2),
+            ])
             .split(inner);
 
-        for (i, line) in rows.iter().take(n).enumerate() {
+        let row_constraints: Vec<Constraint> = (0..n_info).map(|_| Constraint::Length(1)).collect();
+        let row_areas = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(row_constraints)
+            .split(sections[0]);
+        for (i, line) in info_rows.iter().take(n_info).enumerate() {
             f.render_widget(Paragraph::new(line.clone()), row_areas[i]);
         }
+
+        f.render_widget(
+            Gauge::default()
+                .label(format!("ADC util  {:.0}%", util_ratio * 100.0))
+                .ratio(util_ratio)
+                .style(Style::default().fg(util_color)),
+            sections[2],
+        );
     }
 }

@@ -40,6 +40,7 @@ impl Panel for HardwareHealthPanel {
                 Constraint::Length(2),
                 Constraint::Length(1),
                 Constraint::Length(1),
+                Constraint::Length(2),
                 Constraint::Min(0),
             ])
             .split(inner);
@@ -100,6 +101,13 @@ impl Panel for HardwareHealthPanel {
                 Style::default().fg(usb_color),
             )),
             rows[5],
+        );
+        let usb_err_data: Vec<u64> = state.signal.usb_error_history.iter().cloned().collect();
+        f.render_widget(
+            Sparkline::default()
+                .data(&usb_err_data)
+                .style(Style::default().fg(usb_color)),
+            rows[6],
         );
     }
 }
