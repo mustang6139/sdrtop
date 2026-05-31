@@ -23,11 +23,12 @@ fn gain_bar(gain: u32, max_gain: u32, n: usize) -> (String, String) {
 /// Returns the number of space characters needed between the fw-version field
 /// and the right-aligned "AMP … USB …" section in the top band.
 /// All length arguments are in terminal columns (chars, not bytes).
-fn top_band_gap(board_name_len: usize, badge_len: usize, fw_value_len: usize, inner_width: u16) -> usize {
+fn top_band_gap(board_name_len: usize, badge_len: usize, fw_value_len: usize,
+                amp_val_len: usize, usb_val_len: usize, inner_width: u16) -> usize {
     // left side: " " + " DeviceName " + "  " + " BADGE " + "  " + "hackrf fw " + fw_val
-    let left = 1 + (2 + board_name_len) + 2 + badge_len + 2 + 10 + fw_value_len;
-    // right side: "AMP XXX  ·  USB XXXXXXXXX  " = 4+3+5+4+9+2 = 27 chars
-    let right = 27usize;
+    let left  = 1 + (2 + board_name_len) + 2 + badge_len + 2 + 10 + fw_value_len;
+    // right side: "AMP "(4) + amp_val + "  ·  "(5) + "USB "(4) + usb_val + "  "(2)
+    let right = 4 + amp_val_len + 5 + 4 + usb_val_len + 2;
     (inner_width as usize).saturating_sub(left + right)
 }
 
@@ -79,7 +80,8 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
 
     // --- Gap ---
     let board_len = state.system.board_name.chars().count();
-    let gap = top_band_gap(board_len, badge_len, fw_len, inner_width);
+    let gap = top_band_gap(board_len, badge_len, fw_len,
+                           amp_val.chars().count(), usb_val.chars().count(), inner_width);
 
     Line::from(vec![
         Span::raw(" "),
@@ -246,19 +248,19 @@ mod tests {
     #[test]
     fn top_band_gap_rx_state() {
         // HackRF One (len=10), badge " ● RX " (len=6), fw "2024.02.1" (len=9), inner=78
-        // label "hackrf fw " = 10 chars
-        assert_eq!(top_band_gap(10, 6, 9, 78), 9);
+        // amp_val "ON " (3), usb_val "10.0 MB/s" (9)
+        assert_eq!(top_band_gap(10, 6, 9, 3, 9, 78), 9);
     }
 
     #[test]
     fn top_band_gap_idle_state() {
         // badge " ○ IDLE " is 2 chars wider than RX → gap shrinks by 2
-        assert_eq!(top_band_gap(10, 8, 9, 78), 7);
+        assert_eq!(top_band_gap(10, 8, 9, 3, 9, 78), 7);
     }
 
     #[test]
     fn top_band_gap_observer_state() {
         // badge " ◈ OBSERVER " (len=12), fw "—" (len=1)
-        assert_eq!(top_band_gap(10, 12, 1, 78), 11);
+        assert_eq!(top_band_gap(10, 12, 1, 3, 9, 78), 11);
     }
 }
