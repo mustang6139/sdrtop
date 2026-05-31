@@ -24,6 +24,18 @@ pub fn next_wf_stride(current: usize) -> usize {
     WF_STRIDES.iter().find(|&&s| s > current).copied().unwrap_or(64)
 }
 
+// ── Waterfall frequency zoom levels ──────────────────────────────────────────
+
+pub const WF_ZOOM_LEVELS: &[u32] = &[1, 2, 4, 8, 16, 32];
+
+pub fn prev_wf_zoom(current: u32) -> u32 {
+    WF_ZOOM_LEVELS.iter().rev().find(|&&z| z < current).copied().unwrap_or(1)
+}
+
+pub fn next_wf_zoom(current: u32) -> u32 {
+    WF_ZOOM_LEVELS.iter().find(|&&z| z > current).copied().unwrap_or(32)
+}
+
 const DB_MAX: f32 = 0.0;
 
 pub struct WaterfallPanel;
@@ -39,6 +51,7 @@ impl Panel for WaterfallPanel {
     fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
         &[
             ("↑ ↓", "Zoom colour scale"),
+            ("+ -",  "Frequency zoom"),
             ("J K",  "Scroll history"),
             ("[ ]",  "Row stride (speed)"),
             ("M",    "Place/remove cursor"),
@@ -53,6 +66,7 @@ impl Panel for WaterfallPanel {
         let db_min  = state.waterfall.db_min;
         let scroll  = state.waterfall.scroll_offset;
         let stride  = buf.row_stride;
+        let zoom    = state.waterfall.hz_zoom;
 
         let no_data = state.waterfall.last_fft.is_none();
         let stale = state.waterfall.last_fft.as_ref()
@@ -78,6 +92,12 @@ impl Panel for WaterfallPanel {
             title_spans.push(Span::styled(
                 format!(" [×{}]", stride),
                 Style::default().fg(theme.label),
+            ));
+        }
+        if zoom > 1 {
+            title_spans.push(Span::styled(
+                format!(" [Z×{}]", zoom),
+                Style::default().fg(theme.value_hi),
             ));
         }
         // Clamp scroll display to actual max: content ≈ area minus borders(2) and indicator(1)
@@ -140,9 +160,12 @@ impl Panel for WaterfallPanel {
         let cols = wf_area.width as usize;
         if cols == 0 { return; }
 
-        // Frequency bounds from last FFT frame (for cursor mapping)
+        // Frequency bounds — narrowed by zoom factor (centred on tuned frequency)
         let (left_hz, bw) = state.waterfall.last_fft.as_ref()
-            .map(|fr| (fr.center_freq_hz as f64 - fr.sample_rate / 2.0, fr.sample_rate))
+            .map(|fr| {
+                let visible_bw = fr.sample_rate / zoom as f64;
+                (fr.center_freq_hz as f64 - visible_bw / 2.0, visible_bw)
+            })
             .unwrap_or((0.0, 1.0));
 
         // Cursor column in display space
@@ -166,15 +189,20 @@ impl Panel for WaterfallPanel {
         let floor_color = magnitude_to_color_themed(f32::NEG_INFINITY, db_min, DB_MAX, depth, theme);
         let mut lines: Vec<Line> = Vec::with_capacity(rows_to_show);
 
+        // Zoom: show only the centre slice of bins
+        let zoom_i      = zoom as usize;
+        let row_bins    = buf.rows.front().map(|(_, r)| r.len()).unwrap_or(1);
+        let visible_n   = (row_bins / zoom_i).max(1);
+        let lo_bin      = (row_bins / 2).saturating_sub(visible_n / 2);
+
         let mut data_iter = buf.rows.iter().skip(skip_data).take(data_rows);
         loop {
             let Some((_ts, top_row)) = data_iter.next() else { break };
             let bot_row = data_iter.next().map(|(_ts, r)| r.as_ref());
-            let n = top_row.len();
             let mut spans: Vec<Span> = Vec::with_capacity(cols);
             for col in 0..cols {
-                let bin_start = col * n / cols;
-                let bin_end   = (((col + 1) * n) / cols).max(bin_start + 1).min(n);
+                let bin_start = (lo_bin + col * visible_n / cols).min(row_bins - 1);
+                let bin_end   = (lo_bin + ((col + 1) * visible_n) / cols).max(bin_start + 1).min(row_bins);
                 let top_db    = top_row[bin_start..bin_end].iter().cloned().fold(f32::NEG_INFINITY, f32::max);
                 let top_color = magnitude_to_color_themed(top_db, db_min, DB_MAX, depth, theme);
                 let bot_color = bot_row.map(|r| {

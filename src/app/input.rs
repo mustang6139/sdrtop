@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crate::hardware;
 use crate::state::{InputMode, SdrMetrics, SpectrumMarker};
 use crate::ui::{self, spectrum::{fmt_spectrum_step, next_spectrum_step, prev_spectrum_step}};
-use crate::ui::waterfall::{next_wf_stride, prev_wf_stride};
+use crate::ui::waterfall::{next_wf_stride, prev_wf_stride, next_wf_zoom, prev_wf_zoom};
 
 fn fmt_bw(hz: u64) -> String {
     if hz >= 1_000_000 { format!("{:.1} MHz", hz as f64 / 1_000_000.0) }
@@ -242,6 +242,22 @@ fn handle_waterfall_focus(
             let new_stride = next_wf_stride(m.waterfall.buffer.row_stride);
             m.waterfall.buffer.set_row_stride(new_stride);
             m.push_log(format!("Waterfall: ×{} frames/row", new_stride));
+        }
+        KeyCode::Char('+') | KeyCode::Char('=') => {
+            let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
+            let new_zoom = next_wf_zoom(m.waterfall.hz_zoom);
+            m.waterfall.hz_zoom = new_zoom;
+            m.push_log(format!("Waterfall zoom: ×{}", new_zoom));
+        }
+        KeyCode::Char('-') => {
+            let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
+            let new_zoom = prev_wf_zoom(m.waterfall.hz_zoom);
+            m.waterfall.hz_zoom = new_zoom;
+            if new_zoom == 1 {
+                m.push_log("Waterfall zoom: off".to_string());
+            } else {
+                m.push_log(format!("Waterfall zoom: ×{}", new_zoom));
+            }
         }
         KeyCode::Char('m') => {
             let mut m = state.lock().unwrap_or_else(|e| e.into_inner());

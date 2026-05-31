@@ -74,6 +74,7 @@ pub struct WaterfallState {
     pub db_min:        f32,
     pub scroll_offset: usize,
     pub cursor_freq:   Option<u64>,
+    pub hz_zoom:       u32,
     pub buffer:        WaterfallBuffer,
     pub last_fft:      Option<FftFrame>,
 }
@@ -84,6 +85,7 @@ impl WaterfallState {
             db_min:        -120.0,
             scroll_offset: 0,
             cursor_freq:   None,
+            hz_zoom:       1,
             buffer:        WaterfallBuffer::new(max_rows),
             last_fft:      None,
         }
