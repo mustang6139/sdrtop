@@ -12,12 +12,11 @@ use super::panel::Panel;
 pub struct HeaderPanel;
 
 /// Returns (filled_str, empty_str). Each string is exactly `n` terminal columns.
-/// Uses ▐ (RIGHT HALF BLOCK): each char fills the right half of its cell; the left half
-/// shows the panel background, producing a thin gap between every adjacent segment.
+/// Filled uses █ (FULL BLOCK), empty uses ░ (LIGHT SHADE).
 fn gain_bar(gain: u32, max_gain: u32, n: usize) -> (String, String) {
     let filled = ((gain as f32 / max_gain as f32) * n as f32).round() as usize;
     let filled = filled.min(n);
-    ("▐".repeat(filled), "▐".repeat(n - filled))
+    ("█".repeat(filled), "░".repeat(n - filled))
 }
 
 /// Returns the number of space characters needed between the fw-version field
@@ -151,9 +150,12 @@ fn bottom_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) 
     let vga_color  = if active { theme.status_warn } else { theme.label };
     let dim        = theme.border_dim;
 
-    // left = 3+" "+8+1+"MHz"+4+"SR "+4+" Msps" = 31 chars
-    // right = "LNA "+8+1+2+" dB"+"    "+"VGA "+8+1+2+" dB"+"  " = 42 chars
-    let gap = (inner_width as usize).saturating_sub(31 + 42);
+    // left:  "   "(3) + freq(8) + " "(1) + "MHz"(3) + "    "(4) + "SR "(3) + sr(4) + " Msps"(5) = 31
+    // right: "LNA "(4) + bar(8) + " "(1) + lna(2) + " dB"(3) + "    "(4)
+    //      + "VGA "(4) + bar(8) + " "(1) + vga(2) + " dB"(3) + "  "(2)               = 42
+    let left  = 3 + 8 + 1 + 3 + 4 + 3 + 4 + 5;
+    let right = 4 + 8 + 1 + 2 + 3 + 4 + 4 + 8 + 1 + 2 + 3 + 2;
+    let gap = (inner_width as usize).saturating_sub(left + right);
 
     Line::from(vec![
         Span::raw("   "),
@@ -219,13 +221,13 @@ mod tests {
     fn gain_bar_zero_gain_all_empty() {
         let (filled, empty) = gain_bar(0, 40, 8);
         assert_eq!(filled, "");
-        assert_eq!(empty, "▐▐▐▐▐▐▐▐");
+        assert_eq!(empty, "░░░░░░░░");
     }
 
     #[test]
     fn gain_bar_full_gain_all_filled() {
         let (filled, empty) = gain_bar(40, 40, 8);
-        assert_eq!(filled, "▐▐▐▐▐▐▐▐");
+        assert_eq!(filled, "████████");
         assert_eq!(empty, "");
     }
 

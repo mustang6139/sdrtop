@@ -24,7 +24,7 @@ pub fn render(f: &mut Frame, area: Rect, m: &SdrMetrics, board_name: &str, seria
         status_text,
         m.radio.frequency as f64 / 1_000_000.0,
         m.radio.config_sample_rate / 1_000_000.0,
-        m.radio.current_throughput_bps as f64 / (1024.0 * 1024.0),
+        m.radio.current_throughput_bps as f64 / 1_000_000.0,
         m.radio.actual_sample_rate as f64 / 1_000_000.0,
         if m.radio.amp_enabled { "ON" } else { "OFF" },
     );
