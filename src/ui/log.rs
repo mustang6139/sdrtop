@@ -1,7 +1,7 @@
 use ratatui::{
     layout::{Alignment, Rect},
     style::Style,
-    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
 
@@ -10,6 +10,8 @@ use crate::state::SdrMetrics;
 pub fn render(f: &mut Frame, area: Rect, m: &SdrMetrics, theme: &crate::Theme) {
     let log_lines: Vec<&str> = m.ui.log.iter().map(|s| s.as_str()).collect();
     let log_text = log_lines.join("\n");
+    let inner_h  = area.height.saturating_sub(2) as usize;
+    let scroll   = (log_lines.len()).saturating_sub(inner_h) as u16;
     let panel = Paragraph::new(log_text)
         .block(
             Block::default()
@@ -19,7 +21,7 @@ pub fn render(f: &mut Frame, area: Rect, m: &SdrMetrics, theme: &crate::Theme) {
                 .border_style(Style::default().fg(theme.border_dim)),
         )
         .alignment(Alignment::Left)
-        .wrap(Wrap { trim: true });
+        .scroll((scroll, 0));
     f.render_widget(panel, area);
 }
 
