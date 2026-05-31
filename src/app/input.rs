@@ -307,8 +307,7 @@ fn handle_global(
         KeyCode::Char('2') => { engine.set_preset("spectrum");         state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: spectrum"); }
         KeyCode::Char('3') => { engine.set_preset("waterfall");        state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: waterfall"); }
         KeyCode::Char('4') => { engine.set_preset("spectrum_waterfall"); state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: spectrum+waterfall"); }
-        KeyCode::Char('5') => { engine.set_preset("monitoring");       state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: monitoring"); }
-        KeyCode::Char('6') => { engine.set_preset("lab");              state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: lab"); }
+        KeyCode::Char('5') => { engine.set_preset("lab");              state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: lab"); }
         KeyCode::Char('w') => {
             let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
             m.waterfall.buffer.paused = !m.waterfall.buffer.paused;

@@ -186,17 +186,6 @@ pub struct LayoutConfig {
 impl LayoutConfig {
     pub fn default_config() -> Self {
         use Position::*;
-        let monitoring = PresetConfig {
-            panels: vec![
-                PanelSpec { name: "header".into(),           position: Top,    height: Some(5), width_pct: None     },
-                PanelSpec { name: "hardware_health".into(),  position: Left,   height: None,    width_pct: Some(50) },
-                PanelSpec { name: "iq_diagnostics".into(),   position: Left,   height: None,    width_pct: Some(50) },
-                PanelSpec { name: "telemetry".into(),        position: Right,  height: None,    width_pct: Some(50) },
-                PanelSpec { name: "system_resources".into(), position: Right,  height: None,    width_pct: Some(50) },
-                PanelSpec { name: "log".into(),              position: Bottom, height: Some(7), width_pct: None     },
-                PanelSpec { name: "footer".into(),           position: Bottom, height: Some(3), width_pct: None     },
-            ],
-        };
         let spectrum = PresetConfig {
             panels: vec![
                 PanelSpec { name: "header".into(),   position: Top,    height: Some(5), width_pct: None },
@@ -255,7 +244,6 @@ impl LayoutConfig {
             ],
         };
         let mut presets = HashMap::new();
-        presets.insert("monitoring".into(), monitoring);
         presets.insert("spectrum".into(), spectrum);
         presets.insert("waterfall".into(), waterfall);
         presets.insert("spectrum_waterfall".into(), spectrum_waterfall);

@@ -22,8 +22,7 @@ pub fn render_help(f: &mut Frame) {
  [2]        Preset: spectrum\n\
  [3]        Preset: waterfall\n\
  [4]        Preset: spectrum+waterfall\n\
- [5]        Preset: monitoring\n\
- [6]        Preset: lab\n\
+ [5]        Preset: lab\n\
  [W]        Pause / resume waterfall\n\
  [E]        Focus spectrum panel (expand / zoom)\n\
    Esc      Exit spectrum focus\n\
