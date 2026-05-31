@@ -50,9 +50,43 @@ fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
             t.valid_length as usize,
         );
 
-        // Health accumulation — lock held briefly, no allocation inside
+        // Per-sample math runs entirely without the mutex.
+        // IQ amplitude histogram: Chebyshev distance, 32 bins of width 4.
+        // Clamp to bin 31: i8::MIN.unsigned_abs() == 128 would overflow without min(31).
+        let mut saturated:  u64 = 0;
+        let mut i_sum:      i64 = 0;
+        let mut q_sum:      i64 = 0;
+        let mut i_sq:       i64 = 0;
+        let mut q_sq:       i64 = 0;
+        let mut iq_cross:   i64 = 0;
+        let mut local_hist: [u64; 32] = [0; 32];
+
+        for chunk in buf.chunks_exact(2) {
+            let i_byte = chunk[0] as i8;
+            let q_byte = chunk[1] as i8;
+            let i = i_byte as i64;
+            let q = q_byte as i64;
+            i_sum    += i;
+            q_sum    += q;
+            i_sq     += i * i;
+            q_sq     += q * q;
+            iq_cross += i * q;
+            if chunk[0] == 0x80 || chunk[0] == 0x7F { saturated += 1; }
+            if chunk[1] == 0x80 || chunk[1] == 0x7F { saturated += 1; }
+            let amp = i_byte.unsigned_abs().max(q_byte.unsigned_abs());
+            local_hist[((amp / 4) as usize).min(31)] += 1;
+        }
+
+        let pairs = (buf.len() / 2) as u64;
+        // Timestamp before the lock so jitter measures true inter-callback interval.
+        let now = std::time::Instant::now();
+
+        // Single brief lock to flush accumulated results — O(1), no loops inside.
         {
-            let Ok(mut m) = ctx.metrics.lock() else { return 0; };
+            let Ok(mut m) = ctx.metrics.lock() else {
+                ctx.sample_tx.try_send(buf.to_vec()).ok();
+                return 0;
+            };
 
             m.radio.bytes_since_last_poll += t.valid_length as u64;
 
@@ -62,42 +96,18 @@ fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
                 m.signal.total_drops_session += dropped_pairs;
             }
 
-            let mut saturated: u64 = 0;
-            let mut i_sum: i64 = 0;
-            let mut q_sum: i64 = 0;
-            let mut i_sq: i64 = 0;
-            let mut q_sq: i64 = 0;
-            let mut iq_cross: i64 = 0;
+            m.acc.saturated    += saturated;
+            m.acc.i_sum        += i_sum;
+            m.acc.q_sum        += q_sum;
+            m.acc.i_sq_sum     += i_sq as u64;
+            m.acc.q_sq_sum     += q_sq as u64;
+            m.acc.iq_cross_sum += iq_cross;
+            m.acc.sample_count += pairs;
 
-            for chunk in buf.chunks_exact(2) {
-                let i_byte = chunk[0] as i8;
-                let q_byte = chunk[1] as i8;
-                let i = i_byte as i64;
-                let q = q_byte as i64;
-                i_sum    += i;
-                q_sum    += q;
-                i_sq     += i * i;
-                q_sq     += q * q;
-                iq_cross += i * q;
-                if chunk[0] == 0x80 || chunk[0] == 0x7F { saturated += 1; }
-                if chunk[1] == 0x80 || chunk[1] == 0x7F { saturated += 1; }
-                // IQ amplitude histogram: Chebyshev distance, 32 bins of width 4.
-                // Clamp to bin 31: i8::MIN.unsigned_abs() == 128, which would overflow
-                // a 32-element array without the min(31).
-                let amp = i_byte.unsigned_abs().max(q_byte.unsigned_abs());
-                m.acc.iq_hist[((amp / 4) as usize).min(31)] += 1;
+            for (acc, &local) in m.acc.iq_hist.iter_mut().zip(local_hist.iter()) {
+                *acc += local;
             }
 
-            let pairs = (buf.len() / 2) as u64;
-            m.acc.saturated     += saturated;
-            m.acc.i_sum         += i_sum;
-            m.acc.q_sum         += q_sum;
-            m.acc.i_sq_sum      += i_sq as u64;
-            m.acc.q_sq_sum      += q_sq as u64;
-            m.acc.iq_cross_sum  += iq_cross;
-            m.acc.sample_count  += pairs;
-
-            let now = std::time::Instant::now();
             if let Some(last) = m.acc.last_callback {
                 let gap_us = now.duration_since(last).as_micros() as u64;
                 m.acc.jitter_sum_us += gap_us;
@@ -106,7 +116,7 @@ fn rx_callback_safe(transfer: *mut hackrf_transfer) -> c_int {
             }
             m.acc.last_callback = Some(now);
         }
-        // Lock released — allocate outside the critical section
+
         ctx.sample_tx.try_send(buf.to_vec()).ok();
     }
     0
