@@ -23,13 +23,24 @@ pub const SPECTRUM_STEPS: &[u64] = &[
 ];
 
 pub fn prev_spectrum_step(current: u64) -> u64 {
-    let idx = SPECTRUM_STEPS.iter().position(|&s| s == current).unwrap_or(4);
-    SPECTRUM_STEPS[idx.saturating_sub(1)]
+    match SPECTRUM_STEPS.iter().position(|&s| s == current) {
+        Some(idx) => SPECTRUM_STEPS[idx.saturating_sub(1)],
+        // Not in list: find the largest step strictly below current
+        None => SPECTRUM_STEPS.iter().copied()
+            .filter(|&s| s < current)
+            .last()
+            .unwrap_or(SPECTRUM_STEPS[0]),
+    }
 }
 
 pub fn next_spectrum_step(current: u64) -> u64 {
-    let idx = SPECTRUM_STEPS.iter().position(|&s| s == current).unwrap_or(4);
-    SPECTRUM_STEPS[(idx + 1).min(SPECTRUM_STEPS.len() - 1)]
+    match SPECTRUM_STEPS.iter().position(|&s| s == current) {
+        Some(idx) => SPECTRUM_STEPS[(idx + 1).min(SPECTRUM_STEPS.len() - 1)],
+        // Not in list: find the smallest step strictly above current
+        None => SPECTRUM_STEPS.iter().copied()
+            .find(|&s| s > current)
+            .unwrap_or(*SPECTRUM_STEPS.last().unwrap()),
+    }
 }
 
 fn fmt_khz(hz: u64) -> String {
@@ -65,10 +76,11 @@ impl Panel for SpectrumPanel {
         let stale = state.waterfall.last_fft.as_ref()
             .map(|fr| fr.timestamp.elapsed() > std::time::Duration::from_millis(500))
             .unwrap_or(false);
+        let no_data = state.waterfall.last_fft.is_none();
 
-        let border_color = if focused { theme.border_focused }
-            else if stale { theme.stale }
-            else { theme.border_accent };
+        let border_color = if focused          { theme.border_focused }
+            else if stale || no_data           { theme.stale }
+            else                               { theme.border_accent };
 
         // Title: 'e' in "Spectrum" highlighted as focus key indicator
         let key_style = Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD);
@@ -131,8 +143,9 @@ impl Panel for SpectrumPanel {
                 let freq_area      = rows[1];
                 let indicator_area = if focused { rows.get(2).copied() } else { None };
 
-                let n_bins     = frame.bins_dbfs.len();
-                let n          = n_bins as f64;
+                let n_bins = frame.bins_dbfs.len();
+                if n_bins == 0 { return; }
+                let n = n_bins as f64;
                 let bw         = frame.sample_rate;
                 let left_hz    = frame.center_freq_hz as f64 - bw / 2.0;
                 let right_hz   = frame.center_freq_hz as f64 + bw / 2.0;
@@ -284,7 +297,7 @@ impl Panel for SpectrumPanel {
                         let col     = (frac * cw) as u16;
                         let lw      = label.len() as u16;
                         let col     = col.min(canvas_area.width.saturating_sub(lw));
-                        if col as i32 <= next_free_col { continue; }
+                        if (col as i32) < next_free_col { continue; }
                         next_free_col = col as i32 + lw as i32 + 1;
                         f.render_widget(
                             Paragraph::new(Span::styled(label, Style::default().fg(theme.label))),
