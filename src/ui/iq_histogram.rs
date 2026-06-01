@@ -19,11 +19,15 @@ impl Panel for IqHistogramPanel {
     fn min_size(&self) -> (u16, u16) { (36, 6) }
 
     fn render(&self, f: &mut Frame, area: ratatui::layout::Rect, state: &SdrMetrics, theme: &crate::Theme, _focused: bool) {
+        let stale = !state.radio.hw_streaming;
+        let title = if stale { " IQ Amplitude Distribution [STALE] " }
+                    else     { " IQ Amplitude Distribution " };
+        let border_color = if stale { theme.stale } else { theme.border_default };
         let block = Block::default()
-            .title(" IQ Amplitude Distribution ")
+            .title(title)
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.border_default));
+            .border_style(Style::default().fg(border_color));
         let inner = block.inner(area);
         f.render_widget(block, area);
 
@@ -127,7 +131,7 @@ impl Panel for IqHistogramPanel {
             Span::styled("No samples yet", Style::default().fg(theme.label))
         } else if high_count > total / 10 {
             Span::styled("▲ clipping risk", Style::default().fg(theme.status_crit))
-        } else if total > 0 && low_count > total * 9 / 10 {
+        } else if low_count > total * 9 / 10 {
             Span::styled("▼ weak signal — ADC under-utilised", Style::default().fg(theme.status_warn))
         } else {
             Span::styled("Dynamic range OK", Style::default().fg(theme.status_ok))
