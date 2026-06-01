@@ -93,11 +93,11 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
         ),
         Span::raw("  "),
         Span::styled(
-            badge_text.to_string(),
+            badge_text,
             Style::default().fg(badge_fg).bg(badge_bg).add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
-        Span::styled(fw_label.to_string(), Style::default().fg(theme.label)),
+        Span::styled(fw_label, Style::default().fg(theme.label)),
         Span::styled(fw_val.to_string(), Style::default().fg(fw_color)),
         Span::raw(" ".repeat(gap)),
         Span::styled("AMP ", Style::default().fg(theme.label)),
@@ -114,7 +114,7 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
 /// The returned Line must be rendered at the outer Rect so ├/┤ overwrite the │ border chars.
 fn separator_line(theme: &crate::Theme, outer_width: u16) -> Line<'static> {
     let label = " FREQUENCY ";
-    let label_len = label.len();  // 11 ASCII chars
+    let label_len = label.chars().count();
     let fill = (outer_width as usize).saturating_sub(2 + label_len);  // 2 for ├ and ┤
     let left_fill = fill / 2;
     let right_fill = fill - left_fill;
