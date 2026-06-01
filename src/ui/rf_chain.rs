@@ -13,6 +13,7 @@ use crate::ui::panel::Panel;
 pub struct RfChainPanel;
 
 fn fmt_hz(hz: u32) -> String {
+    if hz == 0        { return "---".to_string(); }
     if hz >= 1_000_000 {
         format!("{:.3} MHz", hz as f64 / 1_000_000.0)
     } else {
@@ -80,13 +81,19 @@ impl Panel for RfChainPanel {
             else if is_warn { theme.status_crit }
             else { theme.status_ok };
 
-        // ADC utilisation gauge: fraction of samples in mid-range bins (8–23)
-        let total: u64 = state.iq.iq_amplitude_hist.iter().sum();
-        let mid: u64   = state.iq.iq_amplitude_hist[8..24].iter().sum();
-        let util_ratio = if total > 0 { mid as f64 / total as f64 } else { 0.0 };
-        let util_color = if util_ratio > 0.5 { theme.status_ok }
-            else if util_ratio > 0.2         { theme.status_warn }
-            else                             { theme.status_crit };
+        // ADC utilisation gauge: fraction of samples in mid-range bins (8–23).
+        // Show as stale (zero bar, stale color) when RX is not streaming.
+        let (util_ratio, util_color) = if stale {
+            (0.0, theme.stale)
+        } else {
+            let total: u64 = state.iq.iq_amplitude_hist.iter().sum();
+            let mid: u64   = state.iq.iq_amplitude_hist[8..24].iter().sum();
+            let ratio = if total > 0 { mid as f64 / total as f64 } else { 0.0 };
+            let color = if ratio > 0.5      { theme.status_ok }
+                        else if ratio > 0.2 { theme.status_warn }
+                        else                { theme.status_crit };
+            (ratio, color)
+        };
 
         let info_rows: &[Line] = &[
             Line::from(vec![
