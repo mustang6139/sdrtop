@@ -23,3 +23,14 @@ num-complex = "0.4"
 
 [build-dependencies]
 pkg-config = "0.3"
+
+[profile.dev.package."*"]
+opt-level = 3
+debug-assertions = false
+overflow-checks = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
