@@ -30,7 +30,9 @@ fn fmt_hz(hz: u32) -> String {
 ///   VGA  — MAX2837 baseband VGA: NF ~10 dB (contribution negligible at high LNA gain)
 ///
 /// Friis: F_total = F₁ + (F₂−1)/G₁ + (F₃−1)/(G₁·G₂)  (all linear, → back to dB)
-fn estimate_nf_db(amp_enabled: bool, lna_gain: u32, vga_gain: u32) -> f64 {
+/// VGA gain is not a parameter — in a 3-stage cascade it does not appear in the
+/// formula (there is no 4th stage whose noise it would need to suppress).
+fn estimate_nf_db(amp_enabled: bool, lna_gain: u32) -> f64 {
     let lin = |db: f64| 10f64.powf(db / 10.0);
 
     let nf_lna = 3.5 + (40.0 - lna_gain as f64).max(0.0) * 0.15;
@@ -58,27 +60,28 @@ fn estimate_mds_dbm(bb_filter_hz: u32, nf_db: f64) -> Option<f64> {
     Some(-174.0 + 10.0 * (bb_filter_hz as f64).log10() + nf_db)
 }
 
-fn gain_advice(hist: &[u64; 32]) -> (&'static str, bool) {
+/// Returns `(text, severity)` where severity: 0 = OK, 1 = warn, 2 = crit.
+fn gain_advice(hist: &[u64; 32]) -> (&'static str, u8) {
     let total: u64 = hist.iter().sum();
-    if total == 0 { return ("no signal — start RX", false); }
+    if total == 0 { return ("no signal — start RX", 0); }
     let low:  u64 = hist[..8].iter().sum();
     let high: u64 = hist[24..].iter().sum();
     let low_pct  = low  * 100 / total;
     let high_pct = high * 100 / total;
     if high_pct > 10 {
-        ("⬇ clipping — reduce gain", true)
+        ("⬇ clipping — reduce gain", 2)
     } else if low_pct > 90 {
-        ("⬆ weak — increase LNA +8 dB", false)
+        ("⬆ weak — increase LNA +8 dB", 1)
     } else if low_pct > 70 {
-        ("⬆ under-utilised — try +8 dB", false)
+        ("⬆ under-utilised — try +8 dB", 1)
     } else {
-        ("✓ gain staging OK", false)
+        ("✓ gain staging OK", 0)
     }
 }
 
 impl Panel for RfChainPanel {
     fn name(&self) -> &'static str { "rf_chain" }
-    fn min_size(&self) -> (u16, u16) { (32, 10) }
+    fn min_size(&self) -> (u16, u16) { (32, 15) }
 
     fn render(&self, f: &mut Frame, area: ratatui::layout::Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         let stale = !state.radio.hw_streaming;
@@ -109,14 +112,18 @@ impl Panel for RfChainPanel {
         let val  = Style::default().fg(theme.value);
         let hi   = Style::default().fg(theme.value_hi);
 
-        let (advice_text, is_warn) = if stale {
-            ("--- (RX not streaming)", false)
+        let (advice_text, advice_sev) = if stale {
+            ("--- (RX not streaming)", 0u8)
         } else {
             gain_advice(&state.iq.iq_amplitude_hist)
         };
-        let advice_color = if stale { theme.stale }
-            else if is_warn { theme.status_crit }
-            else { theme.status_ok };
+        let advice_color = if stale { theme.stale } else {
+            match advice_sev {
+                2 => theme.status_crit,
+                1 => theme.status_warn,
+                _ => theme.status_ok,
+            }
+        };
 
         // ADC utilisation gauge: fraction of samples in mid-range bins (8–23).
         // Show as stale (zero bar, stale color) when RX is not streaming.
@@ -133,7 +140,7 @@ impl Panel for RfChainPanel {
         };
 
         // Estimated cascade Noise Figure (Friis)
-        let nf_db = estimate_nf_db(state.radio.amp_enabled, state.radio.lna_gain, state.radio.vga_gain);
+        let nf_db = estimate_nf_db(state.radio.amp_enabled, state.radio.lna_gain);
         let nf_color = if nf_db < 4.0      { theme.status_ok }
                        else if nf_db < 8.0 { theme.status_warn }
                        else                { theme.status_crit };
@@ -252,34 +259,52 @@ mod tests {
 
     #[test]
     fn nf_amp_on_max_gain_is_near_amp_nf() {
-        // With AMP enabled and max LNA gain, first stage (AMP, NF=2.0 dB)
-        // dominates — cascade NF should be just above 2.0 dB.
-        let nf = estimate_nf_db(true, 40, 20);
+        let nf = estimate_nf_db(true, 40);
         assert!(nf > 2.0 && nf < 3.0, "expected ~2.1 dB, got {:.2}", nf);
     }
 
     #[test]
     fn nf_amp_off_max_lna_gain_near_lna_nf() {
-        // Without AMP, LNA is first stage at max gain (40 dB, NF≈3.5 dB).
-        // VGA contribution is negligible — cascade NF ≈ 3.5 dB.
-        let nf = estimate_nf_db(false, 40, 20);
+        let nf = estimate_nf_db(false, 40);
         assert!(nf > 3.4 && nf < 4.0, "expected ~3.5 dB, got {:.2}", nf);
     }
 
     #[test]
     fn nf_degrades_at_lower_lna_gain() {
-        // Lower LNA gain → higher NF (both LNA NF degrades and VGA contributes more).
-        let nf_high = estimate_nf_db(false, 40, 20);
-        let nf_low  = estimate_nf_db(false,  8, 20);
+        let nf_high = estimate_nf_db(false, 40);
+        let nf_low  = estimate_nf_db(false,  8);
         assert!(nf_low > nf_high, "NF should be worse at lower LNA gain");
     }
 
     #[test]
     fn nf_amp_lowers_cascade_nf() {
-        // Enabling AMP should lower the cascade NF at same LNA/VGA settings.
-        let nf_no_amp = estimate_nf_db(false, 24, 20);
-        let nf_amp    = estimate_nf_db(true,  24, 20);
+        let nf_no_amp = estimate_nf_db(false, 24);
+        let nf_amp    = estimate_nf_db(true,  24);
         assert!(nf_amp < nf_no_amp, "AMP should improve cascade NF");
+    }
+
+    #[test]
+    fn gain_advice_clipping_is_crit() {
+        let mut hist = [0u64; 32];
+        hist[24] = 20; hist[0] = 80; // >10% in high bins
+        let (_, sev) = gain_advice(&hist);
+        assert_eq!(sev, 2);
+    }
+
+    #[test]
+    fn gain_advice_weak_is_warn() {
+        let mut hist = [0u64; 32];
+        hist[0] = 95; hist[8] = 5; // >90% in low bins
+        let (_, sev) = gain_advice(&hist);
+        assert_eq!(sev, 1);
+    }
+
+    #[test]
+    fn gain_advice_ok_is_zero() {
+        let mut hist = [0u64; 32];
+        hist[8] = 50; hist[16] = 50; // mid-range utilisation
+        let (_, sev) = gain_advice(&hist);
+        assert_eq!(sev, 0);
     }
 
     #[test]
