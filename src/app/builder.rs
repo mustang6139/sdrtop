@@ -122,8 +122,8 @@ impl App {
             },
             waterfall: WaterfallState::new(cfg.display.waterfall_max_rows),
             system: SystemState {
-                board_name: board_name.clone(), serial: serial.clone(),
-                fw_version: fw_version.clone(), board_rev,
+                board_name: Arc::from(board_name.as_str()), serial: Arc::from(serial.as_str()),
+                fw_version: Arc::from(fw_version.as_str()), board_rev,
                 usb_api_version: usb_api_ver, cpld_ok,
                 process_cpu_pct: 0.0, process_rss_mb: 0,
             },
@@ -227,8 +227,8 @@ impl App {
             },
             waterfall: WaterfallState::new(cfg.display.waterfall_max_rows),
             system: SystemState {
-                board_name: board_name.clone(), serial: serial.clone(),
-                fw_version: "Observer Mode".to_string(),
+                board_name: Arc::from(board_name.as_str()), serial: Arc::from(serial.as_str()),
+                fw_version: Arc::from("Observer Mode"),
                 board_rev: 0xFE, usb_api_version: 0, cpld_ok: None,
                 process_cpu_pct: 0.0, process_rss_mb: 0,
             },

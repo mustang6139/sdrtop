@@ -48,8 +48,8 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
     // Mayhem nightly: "n_XXXXXX"; Mayhem release: "vX.Y.Z" → label as "mayhem fw "
     // Standard HackRF firmware ("2024.02.1", "git-...") → label as "hackrf fw "
     // Both labels are exactly 10 chars so top_band_gap stays valid.
-    let (fw_val, fw_label): (String, &str) = if state.observer.active {
-        ("—".to_string(), "hackrf fw ")
+    let (fw_val, fw_label): (std::sync::Arc<str>, &str) = if state.observer.active {
+        (std::sync::Arc::from("—"), "hackrf fw ")
     } else {
         let is_mayhem = state.system.fw_version.starts_with("n_")
             || (state.system.fw_version.starts_with('v')
@@ -98,7 +98,7 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
         ),
         Span::raw("  "),
         Span::styled(fw_label.to_string(), Style::default().fg(theme.label)),
-        Span::styled(fw_val, Style::default().fg(fw_color)),
+        Span::styled(fw_val.to_string(), Style::default().fg(fw_color)),
         Span::raw(" ".repeat(gap)),
         Span::styled("AMP ", Style::default().fg(theme.label)),
         Span::styled(amp_val, Style::default().fg(amp_color)),
