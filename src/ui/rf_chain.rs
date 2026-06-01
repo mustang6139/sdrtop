@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
@@ -101,12 +101,6 @@ impl Panel for RfChainPanel {
         let total_gain = state.radio.lna_gain as i32
             + state.radio.vga_gain as i32
             + if state.radio.amp_enabled { 14 } else { 0 };
-
-        let cpld_span = match state.system.cpld_ok {
-            Some(true)  => Span::styled("OK",       Style::default().fg(theme.status_ok)),
-            Some(false) => Span::styled("MISMATCH", Style::default().fg(theme.status_crit).add_modifier(Modifier::BOLD)),
-            None        => Span::styled("n/a",      Style::default().fg(theme.label)),
-        };
 
         let lbl  = Style::default().fg(theme.label);
         let val  = Style::default().fg(theme.value);
@@ -211,10 +205,6 @@ impl Panel for RfChainPanel {
             Line::from(vec![
                 Span::styled(format!("{:<13}", "USB API"), lbl),
                 Span::styled(format!("{:#06x}", state.system.usb_api_version), Style::default().fg(theme.border_dim)),
-            ]),
-            Line::from(vec![
-                Span::styled(format!("{:<13}", "CPLD"),    lbl),
-                cpld_span,
             ]),
             Line::from(vec![Span::raw("")]),
             Line::from(vec![

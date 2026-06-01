@@ -71,7 +71,6 @@ impl App {
         let serial       = device.serial_number()?;
         let board_rev    = device.board_rev().unwrap_or(0xFE);
         let usb_api_ver  = device.usb_api_version().unwrap_or(0);
-        let cpld_ok: Option<bool> = None;
         let theme        = cfg.build_theme();
 
         let (sr_result, bb_filter_hz) = match device.set_sample_rate(cfg.radio.sample_rate) {
@@ -124,7 +123,7 @@ impl App {
             system: SystemState {
                 board_name: Arc::from(board_name.as_str()), serial: Arc::from(serial.as_str()),
                 fw_version: Arc::from(fw_version.as_str()), board_rev,
-                usb_api_version: usb_api_ver, cpld_ok,
+                usb_api_version: usb_api_ver,
                 process_cpu_pct: 0.0, process_rss_mb: 0,
             },
             ui:  UiState::default(),
@@ -137,9 +136,6 @@ impl App {
             m.push_log(format!("Firmware: {}", fw_version));
             m.push_log(format!("Board: {} | USB API: {:#06x}",
                 hardware::Device::board_rev_name(board_rev), usb_api_ver));
-            if cpld_ok == Some(false) {
-                m.push_log("WARNING: CPLD checksum mismatch!");
-            }
             let names = ["frequency", "sample rate", "LNA gain", "VGA gain", "amp"];
             for (result, name) in startup_results.iter().zip(names.iter()) {
                 if let Err(e) = result {
@@ -229,7 +225,7 @@ impl App {
             system: SystemState {
                 board_name: Arc::from(board_name.as_str()), serial: Arc::from(serial.as_str()),
                 fw_version: Arc::from("Observer Mode"),
-                board_rev: 0xFE, usb_api_version: 0, cpld_ok: None,
+                board_rev: 0xFE, usb_api_version: 0,
                 process_cpu_pct: 0.0, process_rss_mb: 0,
             },
             ui:  UiState::default(),
