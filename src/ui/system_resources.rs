@@ -48,7 +48,10 @@ impl Panel for SystemResourcesPanel {
 
         let rss = state.system.process_rss_mb;
         let rss_ratio = (rss as f64 / 512.0).min(1.0);
-        let rss_color = if rss_ratio > 0.8 { theme.status_crit } else { theme.value };
+        // 3-tier colour, consistent with the CPU gauge.
+        let rss_color = if rss_ratio > 0.8 { theme.status_crit }
+            else if rss_ratio > 0.5        { theme.status_warn }
+            else                           { theme.status_ok   };
         f.render_widget(
             Gauge::default()
                 .label(format!("RAM  {} MB", rss))
@@ -57,21 +60,33 @@ impl Panel for SystemResourcesPanel {
             rows[1],
         );
 
-        let throughput_mb = state.radio.current_throughput_bps as f64 / 1_000_000.0;
-        f.render_widget(
-            Paragraph::new(Span::styled(
-                format!("USB  {:.2} MB/s", throughput_mb),
-                Style::default().fg(theme.value),
-            )),
-            rows[2],
-        );
-
-        let sparkline_data: Vec<u64> = state.radio.throughput_history.iter().cloned().collect();
-        f.render_widget(
-            Sparkline::default()
-                .data(&sparkline_data)
-                .style(Style::default().fg(theme.status_ok)),
-            rows[3],
-        );
+        // In observer mode the device is owned by another process and our own
+        // rx task does not run, so our throughput is always 0 — show N/A rather
+        // than a misleading "0.00 MB/s" with an empty graph.
+        if state.observer.active {
+            f.render_widget(
+                Paragraph::new(Span::styled(
+                    "USB  — (device owned externally)",
+                    Style::default().fg(theme.label),
+                )),
+                rows[2],
+            );
+        } else {
+            let throughput_mb = state.radio.current_throughput_bps as f64 / 1_000_000.0;
+            f.render_widget(
+                Paragraph::new(Span::styled(
+                    format!("USB  {:.2} MB/s", throughput_mb),
+                    Style::default().fg(theme.value),
+                )),
+                rows[2],
+            );
+            let sparkline_data: Vec<u64> = state.radio.throughput_history.iter().cloned().collect();
+            f.render_widget(
+                Sparkline::default()
+                    .data(&sparkline_data)
+                    .style(Style::default().fg(theme.status_ok)),
+                rows[3],
+            );
+        }
     }
 }
