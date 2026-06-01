@@ -49,6 +49,15 @@ fn estimate_nf_db(amp_enabled: bool, lna_gain: u32, vga_gain: u32) -> f64 {
     10.0 * f_total.log10()
 }
 
+/// Minimum Detectable Signal in dBm.
+///
+/// MDS = kTB + NF  where kT = −174 dBm/Hz at 290 K.
+/// Returns None when the BB filter bandwidth is unknown (0 Hz).
+fn estimate_mds_dbm(bb_filter_hz: u32, nf_db: f64) -> Option<f64> {
+    if bb_filter_hz == 0 { return None; }
+    Some(-174.0 + 10.0 * (bb_filter_hz as f64).log10() + nf_db)
+}
+
 fn gain_advice(hist: &[u64; 32]) -> (&'static str, bool) {
     let total: u64 = hist.iter().sum();
     if total == 0 { return ("no signal — start RX", false); }
@@ -172,6 +181,21 @@ impl Panel for RfChainPanel {
                 Span::styled(format!("~{:.1} dB", nf_db),  Style::default().fg(nf_color)),
                 Span::styled("  (Friis)", Style::default().fg(theme.border_dim)),
             ]),
+            {
+                let (mds_str, mds_color) = match estimate_mds_dbm(bb_bw, nf_db) {
+                    Some(mds) => {
+                        let color = if mds < -95.0      { theme.status_ok }
+                                    else if mds < -85.0 { theme.status_warn }
+                                    else                { theme.status_crit };
+                        (format!("~{:.0} dBm", mds), color)
+                    }
+                    None => ("---".to_string(), theme.stale),
+                };
+                Line::from(vec![
+                    Span::styled(format!("{:<13}", "MDS"),   lbl),
+                    Span::styled(mds_str, Style::default().fg(mds_color)),
+                ])
+            },
             Line::from(vec![Span::raw("")]),
             Line::from(vec![
                 Span::styled(format!("{:<13}", "Board"),   lbl),
@@ -256,5 +280,26 @@ mod tests {
         let nf_no_amp = estimate_nf_db(false, 24, 20);
         let nf_amp    = estimate_nf_db(true,  24, 20);
         assert!(nf_amp < nf_no_amp, "AMP should improve cascade NF");
+    }
+
+    #[test]
+    fn mds_none_when_bb_filter_zero() {
+        assert!(estimate_mds_dbm(0, 3.5).is_none());
+    }
+
+    #[test]
+    fn mds_10mhz_3_5db_nf() {
+        // MDS = -174 + 10*log10(10_000_000) + 3.5 = -174 + 70 + 3.5 = -100.5 dBm
+        let mds = estimate_mds_dbm(10_000_000, 3.5).unwrap();
+        assert!((mds - (-100.5)).abs() < 0.1, "expected ~-100.5 dBm, got {:.1}", mds);
+    }
+
+    #[test]
+    fn mds_improves_with_narrower_bw() {
+        // Halving BW → -3 dB lower MDS (better sensitivity).
+        let mds_wide   = estimate_mds_dbm(10_000_000, 3.5).unwrap();
+        let mds_narrow = estimate_mds_dbm( 5_000_000, 3.5).unwrap();
+        assert!((mds_wide - mds_narrow - 3.0).abs() < 0.1,
+            "halving BW should improve MDS by 3 dB");
     }
 }
