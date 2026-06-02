@@ -36,7 +36,37 @@ base = "nord"   # which color theme to use
 
 ---
 
-## Frequency markers
+## Runtime input: frequency and sample rate
+
+While sdrtop is running, you can change settings without restarting:
+
+### Frequency (press `f`)
+
+You'll see a prompt asking for the frequency in **MHz**. Examples:
+
+```
+Enter frequency (MHz): 92.8    → 92.8 MHz (FM broadcast)
+Enter frequency (MHz): 433.92  → 433.92 MHz (ISM band)
+Enter frequency (MHz): 2.4065  → 2.4065 GHz (WiFi)
+```
+
+Valid range: **1 MHz to 6 GHz** (HackRF One limits).
+
+### Sample rate (press `s`)
+
+You'll see a prompt asking for the sample rate in **MHz**. Examples:
+
+```
+Enter sample rate (MHz): 2     → 2 MHz (narrow capture)
+Enter sample rate (MHz): 10    → 10 MHz (balanced)
+Enter sample rate (MHz): 20    → 20 MHz (maximum, uses full USB 2.0 bandwidth)
+```
+
+Valid range: **2 MHz to 20 MHz**.
+
+The actual achieved rate may be slightly lower than requested, especially on slower systems or with poor USB cables. Check the **Lab preset** (`5`) to see the configured vs. measured rate.
+
+---
 
 You can save named frequency markers. They appear as vertical lines on the spectrum with a label.
 

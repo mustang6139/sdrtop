@@ -74,7 +74,9 @@ sdrtop --config ~/my-config.toml
 
 ## First run
 
-When sdrtop starts, press `Space` to begin receiving. The spectrum and waterfall will come to life. Use `↑` / `↓` to adjust LNA gain if the signal looks too weak or too strong.
+When sdrtop starts, you may see a **device selector** if you have multiple HackRF devices connected. Use `↑` / `↓` (or `j` / `k`) to select your preferred device, then press `Enter`.
+
+Once the app starts, press `Space` to begin receiving. The spectrum and waterfall will come to life. Use `↑` / `↓` to adjust LNA gain if the signal looks too weak or too strong.
 
 Press `?` at any time to see the full key reference on screen.
 

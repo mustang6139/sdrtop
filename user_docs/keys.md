@@ -52,6 +52,8 @@ Press `e` to enter focus mode on the spectrum panel. The border changes color to
 | `↑` / `↓` | Zoom the dBFS axis (expand or compress the signal range shown) |
 | `j` / `k` | Move the cursor left or right across the spectrum |
 | `m` | Place a named marker at the cursor position |
+| `b` | Cycle channel bandwidth on the nearest marker |
+| `h` | Hold / unhold spectrum frame (freeze behind live signal) |
 | `Esc` | Exit focus mode |
 
 ---
