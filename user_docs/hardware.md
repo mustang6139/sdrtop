@@ -15,6 +15,18 @@ sdrtop is built and tested on real hardware. Support is only added after physica
 
 ---
 
+## Host platforms
+
+| Platform | Status |
+|----------|--------|
+| x86-64 Linux | Fully supported |
+| Raspberry Pi (Pi 2 and newer, 64-bit Raspberry Pi OS Bookworm) | Supported — lower sample rates on older Pis |
+| ARM / Android (Termux) | Builds and runs; needs a root-capable USB stack to reach the device |
+
+sdrtop needs **libhackrf 2023.01.1 or newer** (the version in Raspberry Pi OS Bookworm and Ubuntu 24.04). Older distributions need libhackrf built from source.
+
+---
+
 ## What's coming
 
 | Device | Status | Notes |

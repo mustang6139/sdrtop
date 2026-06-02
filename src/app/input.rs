@@ -370,6 +370,13 @@ fn handle_global(
         KeyCode::Char('3') => { engine.set_preset("waterfall");        state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: waterfall"); }
         KeyCode::Char('4') => { engine.set_preset("spectrum_waterfall"); state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: spectrum+waterfall"); }
         KeyCode::Char('5') => { engine.set_preset("lab");              state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: lab"); }
+        // Slots for the planned presets. Each lights up automatically once its
+        // preset is defined in config.rs; until then it logs without switching.
+        KeyCode::Char('6') => { try_set_preset(engine, state, "lab_iq"); }
+        KeyCode::Char('7') => { try_set_preset(engine, state, "lab_rf"); }
+        KeyCode::Char('8') => { try_set_preset(engine, state, "lab_timing"); }
+        KeyCode::Char('9') => { try_set_preset(engine, state, "lab_signal"); }
+        KeyCode::Char('0') => { try_set_preset(engine, state, "micro_main"); }
         KeyCode::Char('w') => {
             let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
             m.waterfall.buffer.paused = !m.waterfall.buffer.paused;
@@ -473,6 +480,21 @@ fn handle_global_no_device(
     focus_keys: &HashMap<char, &'static str>,
 ) -> KeyAction {
     handle_global(key, state, None, engine, show_help, show_footer, focus_keys)
+}
+
+/// Switch to `name` if the preset is defined, otherwise log that it is not yet
+/// available. This keeps the number-key framework (`[6]`–`[9]`, `[0]`) in place
+/// before the presets themselves exist, so each one activates the moment it is
+/// added to the layout config.
+fn try_set_preset(engine: &mut ui::LayoutEngine, state: &Arc<Mutex<SdrMetrics>>, name: &str) -> KeyAction {
+    let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
+    if engine.has_preset(name) {
+        engine.set_preset(name);
+        m.push_log(format!("Preset: {}", name));
+    } else {
+        m.push_log(format!("Preset '{}' not yet available", name));
+    }
+    KeyAction::Continue
 }
 
 // ── Text input modes ──────────────────────────────────────────────────────────

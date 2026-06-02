@@ -17,6 +17,10 @@ pub struct UiState {
     pub input_buf:              String,
     pub focused_panel:          Option<String>,
     pub focused_panel_bindings: &'static [(&'static str, &'static str)],
+    /// Name of the engine's active preset, synced each frame before draw so the
+    /// footer can show it. The engine owns the authoritative value; this is a
+    /// render-time mirror.
+    pub active_preset:          String,
     pub log:                    VecDeque<Arc<str>>,
 }
 
@@ -36,6 +40,7 @@ impl Default for UiState {
             input_buf:              String::new(),
             focused_panel:          None,
             focused_panel_bindings: &[],
+            active_preset:          String::new(),
             log:                    VecDeque::new(),
         }
     }

@@ -53,6 +53,22 @@ Press `e` to enter focus mode on the spectrum panel. The border changes color to
 
 ---
 
+## Waterfall focus mode
+
+Press `l` to enter focus mode on the waterfall panel.
+
+| Key | What it does |
+|-----|-------------|
+| `↑` / `↓` | Adjust the color scale (show faint or strong signals in more detail) |
+| `[` / `]` | Frame averaging — combine multiple frames per row for a longer time window |
+| `+` / `-` | Frequency zoom — magnify the centre of the band (`=` also zooms in) |
+| `m` | Place or remove a frequency cursor |
+| `←` / `→` | Move the cursor frequency when one is placed |
+| `j` / `k` | Scroll back and forth through waterfall history |
+| `Esc` | Exit focus mode |
+
+---
+
 ## Tips
 
 - If you're not sure what a reading means, the `?` overlay shows a quick summary while you use the app.

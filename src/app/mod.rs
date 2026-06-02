@@ -79,7 +79,10 @@ impl App {
     }
 
     fn draw<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
-        let m = self.state.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let mut m = self.state.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        // Mirror the engine's active preset into the cloned snapshot so the
+        // footer can render it without reaching into the engine.
+        m.ui.active_preset = self.engine.active_preset().to_string();
         let hide_footer = !self.show_footer
             && m.ui.input_mode == crate::state::InputMode::Normal;
         self.engine.set_panel_hidden("footer", hide_footer);

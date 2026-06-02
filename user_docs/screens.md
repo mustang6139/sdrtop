@@ -45,17 +45,26 @@ Shows whether your HackRF is running smoothly, with trend sparklines for each me
 
 - **Drops** — sample drops per second + session total + trend graph.
 - **ADC saturation** — how often samples hit the ADC ceiling + peak + trend.
-- **Jitter** — USB callback timing variance. High jitter often precedes drops.
+- **CPU / RAM** — sdrtop's own processor and memory use + trend. CPU is a system-wide percentage (100% = all cores maxed).
 - **USB errors** — zero-length USB transfers, usually caused by cable or hub issues + trend.
+- **SR** — configured vs. actually-measured sample rate. A large gap means USB can't sustain the requested rate.
+- **BUF fill** — receive-buffer fill percentage + trend. A leading indicator — if it climbs toward 100%, drops are coming.
 
 ---
 
 ## RF chain
 
-Diagnostic view of the signal path. Shows baseband filter bandwidth, total gain across all stages (LNA + VGA + AMP), board revision, USB API version, and CPLD status. At the bottom:
+Diagnostic view of the signal path. Shows the current frequency and its wavelength, sample rate, baseband filter bandwidth, and a visual gain chain (AMP → LNA → VGA = total dB). Two derived figures stand out:
+
+- **Est. NF** — estimated noise figure (how much noise the receiver adds), via the Friis formula.
+- **MDS** — minimum detectable signal in dBm (the weakest signal you can hear in this configuration).
+
+At the bottom:
 
 - **ADC utilisation gauge** — what fraction of incoming samples land in the optimal amplitude range (not too weak, not clipping).
 - **Gain advisor** — reads the ADC utilisation and tells you whether to increase or reduce gain, and by how much.
+
+See the [Lab preset guide](lab.md) for what each number means and how to use them.
 
 ---
 
@@ -64,8 +73,10 @@ Diagnostic view of the signal path. Shows baseband filter bandwidth, total gain 
 Measures the quality of the I/Q signal from the ADC:
 
 - **DC offset** — how far the I and Q channels are shifted from zero. A non-zero offset causes the DC spike at the center frequency. Shown separately for I and Q, plus a combined magnitude gauge.
+- **DC spike** — how tall that centre-frequency spike is, in dBFS.
 - **Amplitude imbalance** — whether I and Q have the same power level. Causes mirror images in the spectrum.
 - **Phase imbalance** — whether I and Q are exactly 90° apart. Also causes mirroring.
+- **IRR** — image rejection ratio in dB: how far below each real signal its mirror image appears. Higher is better (30 dB+ is clean).
 
 A contextual hint at the bottom summarises whether anything needs attention.
 
@@ -79,7 +90,9 @@ A bar chart of incoming signal amplitudes across 32 bins. The color zones show:
 - **Green (center)** — healthy range: good dynamic range usage.
 - **Red (right)** — high amplitude: approaching or hitting clipping.
 
-A status line below the chart tells you what it means: "Dynamic range OK", "weak signal — ADC under-utilised", or "clipping risk".
+Below the chart: a **Low / Mid / Clip** percentage breakdown for setting gain precisely, and **PAPR** (peak-to-average power ratio) which fingerprints the signal type — under 3 dB is CW/FM, higher values mean AM, wideband, or bursty signals.
+
+A status line tells you what it means: "Dynamic range OK", "weak signal — ADC under-utilised", or "clipping risk".
 
 ---
 
@@ -101,5 +114,7 @@ Switch between preset layouts with number keys. Each preset rearranges which pan
 | `2` | Spectrum only |
 | `3` | Waterfall only |
 | `4` | Spectrum + waterfall |
-| `5` | Lab — RF chain · IQ histogram · IQ diagnostics · hardware health |
+| `5` | Lab — RF chain · IQ histogram · IQ diagnostics · hardware health ([full guide](lab.md)) |
 | `p` | Cycle through presets |
+
+The **Lab** preset has its own detailed walkthrough: **[The Lab Preset](lab.md)**.

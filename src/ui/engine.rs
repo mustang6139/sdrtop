@@ -43,6 +43,13 @@ impl LayoutEngine {
         }
     }
 
+    /// Whether a preset with this name is defined. Used by the number-key
+    /// handlers to distinguish "switch" from "not yet available" (the [6]–[9]
+    /// and [0] slots light up automatically as their presets get defined).
+    pub fn has_preset(&self, name: &str) -> bool {
+        self.config.presets.contains_key(name)
+    }
+
     pub fn focus(&mut self, name: &str) {
         self.focused_panel = Some(name.to_string());
     }

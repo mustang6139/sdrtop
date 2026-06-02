@@ -31,10 +31,10 @@ I didn't want to cut corners, so this definitely isn't a lazy `hackrf_info` clon
 - **Spectrum analyzer** — FFT with EMA smoothing, peak hold, noise floor, dBFS axis, zoom, band plan overlay, frequency markers
 - **Waterfall** — scrolling spectrogram with truecolor / 256-color / 16-color support
 - **Signal strip** — live bar: P/NF · channel power · noise floor · ADC saturation · drops · buffer fill · IQ imbalance · RBW
-- **RF chain** — baseband filter BW, total gain, CPLD status, ADC utilisation gauge, gain advisor
-- **IQ diagnostics** — DC offset (I/Q + magnitude gauge), amplitude imbalance, phase imbalance, contextual hint
-- **Hardware health** — drop rate + trend, ADC saturation + trend, USB jitter, USB errors + trend (all with sparklines)
-- **IQ histogram** — ADC amplitude distribution; flags clipping and dynamic range issues
+- **RF chain** — frequency + wavelength (λ, λ/4), visual gain chain, estimated noise figure (Friis), minimum detectable signal (MDS), ADC utilisation gauge, gain advisor
+- **IQ diagnostics** — DC offset (I/Q + magnitude gauge), DC spike level, amplitude/phase imbalance, image rejection ratio (IRR), contextual hint
+- **Hardware health** — drops, ADC saturation, CPU/RAM, USB errors, sample-rate accuracy, buffer fill (all with trend sparklines)
+- **IQ histogram** — ADC amplitude distribution with Low/Mid/Clip breakdown and PAPR (signal-type fingerprint); flags clipping and dynamic range issues
 - **Observer mode** — device identity and owner process when another app holds the radio
 - **Six themes** — `sdr` · `nord` · `dracula` · `gruvbox` · `catppuccin` · `solarized`
 - **Layout presets** — five presets, switch on the fly with number keys or cycle with `p`
