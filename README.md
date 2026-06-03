@@ -90,8 +90,8 @@ Press `Space` to start receiving. Press `?` for the key reference. Press `q` to 
 | `e`        | Focus spectrum panel           |
 | `l`        | Focus waterfall panel          |
 | `i` / `v` / `t` | Focus lab panel: IQ / hardware vitals / timing |
-| `1`–`5`    | Switch built-in layout preset  |
-| `6` / `7` / `8` / `9` | Lab presets: IQ / RF / timing / signal |
+| `1`–`4`    | Switch built-in layout preset  |
+| `5` / `6` / `7` / `8` | Lab presets: IQ / RF / timing / signal |
 | `0`        | Micro field-mode view (compact, adapts to width) |
 | `p`        | Cycle presets                  |
 | `Tab`      | Toggle footer bar              |

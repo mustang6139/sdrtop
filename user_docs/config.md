@@ -62,6 +62,8 @@ You can add as many as you like. You can also place them from within sdrtop usin
 
 A *preset* is a named arrangement of panels. sdrtop ships with built-in presets you switch between with the number keys, but you can also define your own in the config file. Your presets are merged with the built-in ones at startup, and they survive a save — sdrtop never erases hand-written presets.
 
+**Every preset is overridable** — including the built-ins. If you define a preset with the same name as a built-in (`main`, `spectrum`, `lab_iq`, `lab_rf`, `lab_timing`, `lab_signal`, `micro_main`, …), your version replaces it, and the number key that triggers it now opens your layout. New names you invent join the `[P]` cycle automatically.
+
 A preset is a list of panels. Each panel has a `name`, a `position`, and optionally a size:
 
 ```toml

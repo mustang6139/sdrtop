@@ -59,25 +59,25 @@
 
 1. **Press `Space` to start RX.** If RX isn't streaming, the display will be frozen. You should see data moving almost immediately.
 2. **Check gain settings.** If the spectrum is completely flat (all noise or all empty), your gain is probably too high or too low. Use `↑` / `↓` to adjust LNA gain. A good starting point is LNA 24, VGA 30.
-3. **Check the Lab preset.** Press `5` to see the **Lab** view, which shows **Hardware Health** metrics. Look for:
+3. **Check the Hardware Vitals.** Press `6` or `7` for a lab view that shows the **Hardware Vitals** metrics (or press `v` to focus it). Look for:
    - **Drops** — if non-zero, USB can't keep up; try lowering sample rate with `s`.
    - **ADC saturation** — if high, turn down gain.
    - **CPU** — if near 100%, the host is maxed out.
 
 ### Many samples dropping ("Drops" counter is high)
 
-**Problem:** The **Drops** counter in the Hardware Health panel is climbing, or you see non-zero in the signal strip.
+**Problem:** The **Drops** counter in the Hardware Vitals panel is climbing, or you see non-zero in the signal strip.
 
 **Solution:**
 
 1. **Lower the sample rate.** Press `s` and type a lower rate (start with 5 MHz if you're at 20 MHz).
 2. **Check USB stability.** Use a different USB cable, port, or hub. Long cables or cheap hubs often cause drops.
-3. **Check the host CPU.** Press `5` for the Lab view and watch the CPU metric. If it's consistently above 80% on a modern multi-core machine, something else on your system is consuming CPU.
+3. **Check the host CPU.** Press `7` for the Lab Timing view and watch the CPU metric. If it's consistently above 80% on a modern multi-core machine, something else on your system is consuming CPU.
 4. **Try a different host.** If you have access to another Linux machine (Pi, another desktop, etc.), test the same setup there. USB or driver issues on your main host will be obvious.
 
 ### USB errors or "zero-length transfers"
 
-**Problem:** The **USB errors** metric in the Hardware Health panel shows a non-zero count.
+**Problem:** The **USB errors** metric in the Hardware Vitals panel shows a non-zero count.
 
 **Solution:**
 
@@ -107,7 +107,7 @@
 
 ### IQ diagnostics show high DC offset
 
-**Problem:** The **DC I** or **DC Q** metric in the Lab preset is non-zero, or **DC spike** is high (above −40 dBFS).
+**Problem:** The **DC I** or **DC Q** metric in the Lab IQ preset (`5`) is non-zero, or **DC spike** is high (above −40 dBFS).
 
 **Solution:**
 
@@ -117,7 +117,7 @@
 
 ### IRR (Image Rejection Ratio) is low
 
-**Problem:** The **IRR** in the Lab preset is below 20 dB.
+**Problem:** The **IRR** in the Lab IQ preset (`5`) is below 20 dB.
 
 **Solution:**
 

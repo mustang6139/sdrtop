@@ -64,7 +64,7 @@ At the bottom:
 - **ADC utilisation gauge** — what fraction of incoming samples land in the optimal amplitude range (not too weak, not clipping).
 - **Gain advisor** — reads the ADC utilisation and tells you whether to increase or reduce gain, and by how much.
 
-See the [Lab preset guide](lab.md) for what each number means and how to use them.
+See the [lab presets guide](lab.md) for what each number means and how to use them.
 
 ---
 
@@ -114,7 +114,10 @@ Switch between preset layouts with number keys. Each preset rearranges which pan
 | `2` | Spectrum only |
 | `3` | Waterfall only |
 | `4` | Spectrum + waterfall |
-| `5` | Lab — RF chain · IQ histogram · IQ diagnostics · hardware health ([full guide](lab.md)) |
+| `5` | Lab IQ — IQ diagnostics · histogram · spectrum ([guide](lab.md)) |
+| `6` | Lab RF — RF chain · spectrum · hardware vitals ([guide](lab.md)) |
+| `7` | Lab Timing — stream-timing diagnostics · hardware vitals ([guide](lab.md)) |
+| `8` | Lab Signal — spectrum · signal metrics · waterfall ([guide](lab.md)) |
 | `p` | Cycle through presets |
 
-The **Lab** preset has its own detailed walkthrough: **[The Lab Preset](lab.md)**.
+The **lab presets** have their own detailed walkthrough: **[The Lab Presets](lab.md)**.

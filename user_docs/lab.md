@@ -1,24 +1,25 @@
-# The Lab Preset
+# The Lab Presets
 
 ← [Back](README.md)
 
-Press `5` to open the **Lab** preset. This is the bench-engineer view: instead of a live spectrum, it gathers every measurement sdrtop can derive about your receiver's *signal quality* and *hardware health* into one screen. It's built for setting up a clean capture and watching for trouble during a long run.
+sdrtop's **lab presets** are the bench-engineer views: instead of just a live spectrum, they surface the measurements sdrtop can derive about your receiver's *signal quality* and *hardware health*. They're built for setting up a clean capture and watching for trouble during a long run.
 
-The layout has four panels:
+The measurements are split across four focused presets, each on its own number key:
 
-```
-┌─ RF Chain ──────┬─ IQ Amplitude Distribution ─┬─ IQ Diagnostics ──┐
-│                 │                              │                   │
-│                 ├─ Hardware Health ────────────┤                   │
-│                 │                              │                   │
-└─────────────────┴──────────────────────────────┴───────────────────┘
-```
+| Key | Preset | Focus |
+|-----|--------|-------|
+| `5` | **Lab IQ** | IQ diagnostics + amplitude histogram + spectrum |
+| `6` | **Lab RF** | RF chain (NF / MDS) + spectrum + hardware vitals |
+| `7` | **Lab Timing** | stream-timing diagnostics + hardware vitals |
+| `8` | **Lab Signal** | spectrum + signal metrics + waterfall |
 
-Every panel turns its border and title **[STALE]** when RX is not streaming, so you always know whether you're looking at live data or a frozen snapshot.
+This guide explains each measurement below; the heading notes which preset to open for it. Every panel turns its border and title **[STALE]** when RX is not streaming, so you always know whether you're looking at live data or a frozen snapshot.
+
+> The lab panels also have a focus mode for extra actions — see [Keyboard Shortcuts](keys.md#lab-panel-focus-modes). The focus key is the highlighted letter in each panel's title.
 
 ---
 
-## RF Chain
+## RF Chain  ·  *Lab RF (`6`)*
 
 The receiver's capability in the current configuration — what the hardware *can* do, before any signal arrives.
 
@@ -59,7 +60,7 @@ A typical value at 10 MHz bandwidth with a 3.5 dB noise figure is about −100 d
 
 ---
 
-## IQ Amplitude Distribution
+## IQ Amplitude Distribution  ·  *Lab IQ (`5`)*
 
 A histogram of incoming sample amplitudes across 32 bins, log-scaled vertically so both rare strong peaks and the bulk of weak samples are visible at once. Colour zones:
 
@@ -86,7 +87,7 @@ A status line at the bottom summarises the picture: "Dynamic range OK", "weak si
 
 ---
 
-## IQ Diagnostics
+## IQ Diagnostics  ·  *Lab IQ (`5`)*
 
 The quality of the I/Q signal coming off the ADC. Problems here show up as artefacts in the spectrum.
 
@@ -100,7 +101,7 @@ A contextual hint at the bottom summarises whether anything needs attention, col
 
 ---
 
-## Hardware Health
+## Hardware Vitals  ·  *Lab RF (`6`) / Lab Timing (`7`)*
 
 Whether the capture chain is keeping up, with a trend sparkline under each metric.
 
@@ -113,15 +114,15 @@ Whether the capture chain is keeping up, with a trend sparkline under each metri
 
 ---
 
-## Using the Lab preset in practice
+## Using the lab presets in practice
 
-A typical setup flow:
+A typical setup flow, switching presets as you go:
 
 1. Tune to your target and start RX (`Space`).
-2. Watch the **IQ Amplitude Distribution** and the **gain advisor** in RF Chain. Adjust LNA/VGA (`↑`/`↓`, `[`/`]`) until Mid is high and Clip stays at 0%.
-3. Check **Est. NF** and **MDS** in RF Chain — confirm the receiver is sensitive enough for what you're chasing.
-4. Glance at **IQ Diagnostics** — IRR above 30 dB and DC spike below −40 dBFS mean clean quadrature.
-5. During a long capture, keep an eye on **Hardware Health** — CPU, BUF fill, and Drops together tell you whether the run is sustainable.
+2. In **Lab IQ (`5`)**, watch the **IQ Amplitude Distribution**. Adjust LNA/VGA (`↑`/`↓`, `[`/`]`) until Mid is high and Clip stays at 0%; glance at **IQ Diagnostics** — IRR above 30 dB and DC spike below −40 dBFS mean clean quadrature.
+3. In **Lab RF (`6`)**, check the **gain advisor**, **Est. NF** and **MDS** — confirm the receiver is sensitive enough for what you're chasing.
+4. In **Lab Timing (`7`)**, confirm the timing verdict is Good/Excellent before committing to a long run.
+5. During a long capture, keep an eye on **Hardware Vitals** (in the `6`/`7` labs) — CPU, BUF fill, and Drops together tell you whether the run is sustainable.
 
 ---
 

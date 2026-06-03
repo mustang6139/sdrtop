@@ -216,18 +216,6 @@ impl LayoutConfig {
                 PanelSpec { name: "footer".into(),    position: Bottom, height: None,    width_pct: None },
             ],
         };
-        let lab = PresetConfig {
-            panels: vec![
-                PanelSpec { name: "header".into(),          position: Top,    height: Some(5), width_pct: None     },
-                PanelSpec { name: "rf_chain".into(),        position: Left,   height: None,    width_pct: Some(33) },
-                PanelSpec { name: "iq_histogram".into(),    position: Body,   height: None,    width_pct: None     },
-                PanelSpec { name: "iq_diagnostics".into(),  position: Right,  height: None,    width_pct: Some(33) },
-                PanelSpec { name: "hardware_health".into(), position: Right,  height: None,    width_pct: Some(33) },
-                PanelSpec { name: "signal_strip".into(),    position: Bottom, height: Some(3), width_pct: None     },
-                PanelSpec { name: "log".into(),             position: Bottom, height: Some(5), width_pct: None     },
-                PanelSpec { name: "footer".into(),          position: Bottom, height: None,    width_pct: None     },
-            ],
-        };
         let observer = PresetConfig {
             panels: vec![
                 PanelSpec { name: "header".into(),           position: Top,    height: Some(5), width_pct: None     },
@@ -332,7 +320,6 @@ impl LayoutConfig {
         presets.insert("spectrum".into(), spectrum);
         presets.insert("waterfall".into(), waterfall);
         presets.insert("spectrum_waterfall".into(), spectrum_waterfall);
-        presets.insert("lab".into(), lab);
         presets.insert("observer".into(), observer);
         presets.insert("main".into(), main);
         presets.insert("lab_iq".into(), lab_iq);

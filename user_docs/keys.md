@@ -17,8 +17,8 @@
 | `h` | Freeze the spectrum (hold the current frame) |
 | `e` | Enter spectrum focus mode |
 | `l` | Enter waterfall focus mode |
-| `1`–`5` | Switch built-in layout preset |
-| `6` / `7` / `8` / `9` | Lab presets — IQ, RF, timing, signal (specialised diagnostics layouts) |
+| `1`–`4` | Switch built-in layout preset |
+| `5` / `6` / `7` / `8` | Lab presets — IQ, RF, timing, signal (specialised diagnostics layouts) |
 | `0` | Micro field-mode view — compact layout for small screens / SSH; press again to cycle micro views |
 | `p` | Cycle through presets |
 | `Tab` | Show or hide the footer bar |
@@ -83,9 +83,9 @@ lists the extra keys; `Esc` exits.
 
 | Key | Panel | What it adds |
 |-----|-------|--------------|
-| `i` | **I**Q Diagnostics (`[6]` lab_iq) | `C` — log a snapshot of the current DC offset, IQ imbalance and phase |
-| `v` | Hardware **V**itals (`[5]`/`[7]` labs) | `R` — reset the session drop counter · `C` — clear the trend sparklines |
-| `t` | **T**iming (`[8]` lab_timing) | `R` — reset the session jitter peak · `C` — clear the jitter / throughput history |
+| `i` | **I**Q Diagnostics (`[5]` lab_iq) | `C` — log a snapshot of the current DC offset, IQ imbalance and phase |
+| `v` | Hardware **V**itals (`[6]` lab_rf / `[7]` lab_timing) | `R` — reset the session drop counter · `C` — clear the trend sparklines |
+| `t` | **T**iming (`[7]` lab_timing) | `R` — reset the session jitter peak · `C` — clear the jitter / throughput history |
 
 The RF chain has no separate focus mode — its gain controls are the regular
 global keys (`↑`/`↓` LNA, `[`/`]` VGA, `a` AMP, `r` reset), which work everywhere.

@@ -462,13 +462,15 @@ fn handle_global(
         KeyCode::Char('2') => { engine.set_preset("spectrum");         state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: spectrum"); }
         KeyCode::Char('3') => { engine.set_preset("waterfall");        state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: waterfall"); }
         KeyCode::Char('4') => { engine.set_preset("spectrum_waterfall"); state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: spectrum+waterfall"); }
-        KeyCode::Char('5') => { engine.set_preset("lab");              state.lock().unwrap_or_else(|e| e.into_inner()).push_log("Preset: lab"); }
-        // Slots for the planned presets. Each lights up automatically once its
-        // preset is defined in config.rs; until then it logs without switching.
-        KeyCode::Char('6') => { try_set_preset(engine, state, "lab_iq"); }
-        KeyCode::Char('7') => { try_set_preset(engine, state, "lab_rf"); }
-        KeyCode::Char('8') => { try_set_preset(engine, state, "lab_timing"); }
-        KeyCode::Char('9') => { try_set_preset(engine, state, "lab_signal"); }
+        // Lab family on [5]–[8]. Each lights up automatically once its preset is
+        // defined; until then it logs without switching.
+        KeyCode::Char('5') => { try_set_preset(engine, state, "lab_iq"); }
+        KeyCode::Char('6') => { try_set_preset(engine, state, "lab_rf"); }
+        KeyCode::Char('7') => { try_set_preset(engine, state, "lab_timing"); }
+        KeyCode::Char('8') => { try_set_preset(engine, state, "lab_signal"); }
+        // [9] reserved for the future lab_sweep (Phase 6); pre-wired so it activates
+        // the moment that preset exists.
+        KeyCode::Char('9') => { try_set_preset(engine, state, "lab_sweep"); }
         KeyCode::Char('0') => { cycle_micro(engine, state); }
         KeyCode::Char('w') => {
             let mut m = state.lock().unwrap_or_else(|e| e.into_inner());

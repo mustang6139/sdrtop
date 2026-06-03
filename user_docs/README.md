@@ -14,7 +14,7 @@ Welcome. This is the plain-language guide to using sdrtop.
 
 ### In-depth guides
 
-- [The Lab preset](lab.md) — the bench-engineer view (NF, MDS, IRR, PAPR, health) in depth
+- [The Lab presets](lab.md) — the bench-engineer views (NF, MDS, IRR, PAPR, vitals, timing) in depth
 - [Tips and Tricks](tips-and-tricks.md) — practical advice for gain tuning, marker systems, waterfall analysis, and workflows
 - [Advanced Features](advanced.md) — multiple devices, custom presets, observer mode, focus mode reference
 - [Troubleshooting](troubleshooting.md) — common issues and solutions

@@ -12,7 +12,7 @@ Practical advice for getting the most out of sdrtop.
 
 A good signal occupies the middle 20% of the ADC range — enough headroom above to catch peaks, enough margin below to stay out of the noise.
 
-The **IQ Amplitude Distribution** in the Lab preset is your best friend. Adjust LNA and VGA until:
+The **IQ Amplitude Distribution** in the Lab IQ preset (`5`) is your best friend. Adjust LNA and VGA until:
 
 - **Low**: under 5% (ADC not wasting bits on empty space)
 - **Mid**: 60–80% (the healthy zone)
@@ -130,34 +130,32 @@ This is the **inverse** of the spectrum zoom: the spectrum zoom changes the dBFS
 
 ---
 
-## Lab preset workflow
+## Lab presets workflow
 
-The Lab preset (`5`) is designed for capture setup. Here's a typical flow:
+The lab presets (`5`–`8`) are built for capture setup — each one focuses on a
+different aspect, so you switch between them as you dial things in. A typical flow:
 
 ### Pre-capture checklist
 
 1. **Tune to your target frequency** with `f`.
-2. **Switch to the Lab preset** with `5`.
-3. **Start RX** with `Space`.
-4. **Adjust gain:**
+2. **Start RX** with `Space`.
+3. **Set gain — Lab IQ (`5`):**
    - Watch the **IQ Amplitude Distribution** histogram.
    - Use `↑` / `↓` and `[` / `]` until **Low** < 5%, **Mid** > 60%, **Clip** < 5%.
-5. **Check RF Chain:**
+   - While here, check **IQ Diagnostics**: **IRR** > 20 dB? **DC spike** < −40 dBFS?
+4. **Check the front end — Lab RF (`6`):**
    - Is **Est. NF** < 5 dB? (Good noise figure.)
    - Is **MDS** low enough to hear your target?
-6. **Check IQ Diagnostics:**
-   - Is **IRR** > 20 dB? (20+ dB is acceptable; 30+ is clean.)
-   - Is **DC spike** < −40 dBFS? (Minimal center tone.)
-7. **Check Hardware Health:**
-   - Are **Drops** zero?
-   - Is **CPU** < 80%?
-   - Is **BUF** stable (not climbing)?
+5. **Check stability — Lab Timing (`7`):**
+   - Are **Drops** zero and the **timing verdict** Good/Excellent?
+   - Is **CPU** < 80% and **BUF** stable (not climbing)?
 
 If everything checks out, you're ready to capture.
 
 ### During a long capture
 
-Keep an eye on the **Hardware Health** panel:
+Keep an eye on the **Hardware Vitals** panel (in the `6`/`7` labs — or press `v`
+to focus it):
 
 - **Drops** climbing → USB is struggling; lower sample rate or try a different cable.
 - **CPU** trending up → something else on your system is consuming CPU; close other apps.
@@ -178,7 +176,7 @@ panels = [
 ]
 ```
 
-Assign it to a key by naming it `lab_timing` (uses key `8`), or access it via `p` (preset cycle).
+Assign it to a key by naming it after a built-in (e.g. `lab_timing` uses key `7`), which overrides that built-in, or access it via `p` (preset cycle).
 
 ---
 

@@ -25,11 +25,10 @@ const NARROW_COLS: u16 = 60;
 /// as a navigation map when one of them is the active preset; only the ones
 /// that actually exist (synced into `preset_names`) are listed.
 const LAB_FAMILY: &[(&str, &str)] = &[
-    ("5", "lab"),
-    ("6", "lab_iq"),
-    ("7", "lab_rf"),
-    ("8", "lab_timing"),
-    ("9", "lab_signal"),
+    ("5", "lab_iq"),
+    ("6", "lab_rf"),
+    ("7", "lab_timing"),
+    ("8", "lab_signal"),
 ];
 
 /// Display label for a preset in the footer. Narrow terminals get an
@@ -276,7 +275,7 @@ mod tests {
     fn preset_label_abbreviates_when_narrow() {
         assert_eq!(preset_label("spectrum_waterfall", true), "spec+wf");
         assert_eq!(preset_label("spectrum_waterfall", false), "spectrum_waterfall");
-        assert_eq!(preset_label("lab", true), "lab");
+        assert_eq!(preset_label("lab_iq", true), "lab_iq");
     }
 
     #[test]
@@ -313,19 +312,19 @@ mod tests {
 
     #[test]
     fn lab_map_lists_only_available_presets_with_active_marked() {
-        let available = vec!["lab".to_string(), "lab_iq".to_string(), "lab_rf".to_string(), "lab_signal".to_string()];
-        let map = lab_map_items("lab_iq", &available);
-        // lab_timing [8] is not available → excluded.
-        assert_eq!(map, vec!["[5] lab", "[6]▸lab_iq", "[7] lab_rf", "[9] lab_signal"]);
+        let available = vec!["lab_iq".to_string(), "lab_rf".to_string(), "lab_signal".to_string()];
+        let map = lab_map_items("lab_rf", &available);
+        // lab_timing [7] is not available → excluded.
+        assert_eq!(map, vec!["[5] lab_iq", "[6]▸lab_rf", "[8] lab_signal"]);
     }
 
     #[test]
     fn normal_items_shows_lab_map_in_lab_preset() {
-        let available = vec!["lab".to_string(), "lab_iq".to_string()];
+        let available = vec!["lab_iq".to_string(), "lab_rf".to_string()];
         let items = normal_items("lab_iq", &available, MicroView::Main, 120);
         // No [P] entry in lab mode; the map entries are appended instead.
         assert!(items.iter().all(|i| !i.starts_with("[P]")));
-        assert!(items.contains(&"[6]▸lab_iq".to_string()));
-        assert!(items.contains(&"[5] lab".to_string()));
+        assert!(items.contains(&"[5]▸lab_iq".to_string()));
+        assert!(items.contains(&"[6] lab_rf".to_string()));
     }
 }

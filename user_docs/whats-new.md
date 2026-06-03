@@ -8,15 +8,15 @@ A plain-language summary of recent changes. Full technical details are in the [d
 
 ## June 2026
 
-### Lab preset — a bench-engineer view
-The Lab preset (`5`) gained a full set of derived measurements aimed at serious capture work. See **[The Lab Preset](lab.md)** for the complete walkthrough.
+### Lab presets — bench-engineer views
+The lab presets (`5`–`8`: IQ, RF, timing, signal) carry a full set of derived measurements aimed at serious capture work. See **[The Lab Presets](lab.md)** for the complete walkthrough.
 
 - **RF Chain** now shows the tuned frequency with its wavelength (λ and λ/4 for antenna cutting), a visual gain chain, an estimated **Noise Figure** (Friis), and the **Minimum Detectable Signal** in dBm. The unused CPLD line was removed.
 - **IQ Amplitude Distribution** added a Low/Mid/Clip percentage breakdown and **PAPR** (crest factor), which fingerprints the signal type at a glance.
 - **IQ Diagnostics** added a **DC spike** level (how tall the centre tone is) and **IRR** (image rejection ratio) — the key quadrature-quality number.
-- **Hardware Health** now tracks sdrtop's own **CPU and RAM**, the **configured-vs-measured sample rate**, and **buffer fill** with trend graphs. The old USB-callback jitter readout was replaced with these more actionable metrics.
+- **Hardware Vitals** now tracks sdrtop's own **CPU and RAM**, the **configured-vs-measured sample rate**, and **buffer fill** with trend graphs. The old USB-callback jitter readout was replaced with these more actionable metrics.
 
-Every Lab panel now clearly marks itself **[STALE]** when RX isn't streaming, so frozen data is never mistaken for live.
+Every lab panel now clearly marks itself **[STALE]** when RX isn't streaming, so frozen data is never mistaken for live.
 
 ---
 

@@ -174,10 +174,10 @@ Then sdrtop will regain control.
 | `2` | `spectrum_only` | Spectrum only |
 | `3` | `waterfall_only` | Waterfall only |
 | `4` | `spectrum_waterfall` | Spectrum + waterfall (no signal strip) |
-| `5` | `lab` | RF Chain + IQ histogram + IQ diagnostics + hardware health |
-| `6` | `lab_iq` | IQ-focused lab view (histogram + diagnostics) |
-| `7` | `lab_rf` | RF-focused lab view (RF chain + hardware health) |
-| `9` | `lab_signal` | Signal metrics (IQ diagnostics + hardware health) |
+| `5` | `lab_iq` | IQ-focused lab view (IQ diagnostics + histogram + spectrum) |
+| `6` | `lab_rf` | RF-focused lab view (RF chain + spectrum + hardware vitals) |
+| `7` | `lab_timing` | Stream-timing diagnostics (timing panel + hardware vitals) |
+| `8` | `lab_signal` | Signal-quality view (spectrum + signal metrics + waterfall) |
 | `0` | `micro_main` | Compact field-mode view (adapts to small screens) |
 
 ### Micro mode

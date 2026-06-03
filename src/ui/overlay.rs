@@ -6,7 +6,7 @@ use ratatui::{
 };
 
 pub fn render_help(f: &mut Frame) {
-    let area = centered_rect(62, 34, f.size());
+    let area = centered_rect(62, 32, f.size());
 
     let text = "\
  [Q]        Quit\n\
@@ -22,8 +22,7 @@ pub fn render_help(f: &mut Frame) {
  [2]        Preset: spectrum\n\
  [3]        Preset: waterfall\n\
  [4]        Preset: spectrum+waterfall\n\
- [5]        Preset: lab\n\
- [6]/[7]/[8]/[9] Lab: IQ / RF / timing / signal\n\
+ [5]/[6]/[7]/[8] Lab: IQ / RF / timing / signal\n\
  [0]        Micro field-mode (press again to cycle)\n\
  [W]        Pause / resume waterfall\n\
  [E]        Focus spectrum panel (expand / zoom)\n\
