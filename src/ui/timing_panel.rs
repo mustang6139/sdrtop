@@ -33,7 +33,15 @@ impl Panel for TimingPanel {
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         let border = if focused { theme.border_focused } else { theme.border_default };
+        // Title: leading 'T' highlighted as the focus-key indicator ([T]).
+        let key_style = Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD);
+        let title_line = Line::from(vec![
+            Span::raw(" "),
+            Span::styled("T", key_style),
+            Span::raw("iming "),
+        ]);
         let block = Block::default()
+            .title(title_line)
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border));

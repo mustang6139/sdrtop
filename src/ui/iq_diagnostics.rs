@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
@@ -120,12 +120,23 @@ impl Panel for IqDiagnosticsPanel {
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         let stale = !state.radio.hw_streaming;
-        let title = if stale { " IQ Diagnostics [STALE] " } else { " IQ Diagnostics " };
+        // Title: leading 'I' highlighted as the focus-key indicator ([I]).
+        let key_style = Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD);
+        let mut title_spans = vec![
+            Span::raw(" "),
+            Span::styled("I", key_style),
+            Span::raw("Q Diagnostics"),
+        ];
+        if stale {
+            title_spans.push(Span::styled(" [STALE]", Style::default().fg(theme.stale)));
+        }
+        title_spans.push(Span::raw(" "));
+        let title_line = Line::from(title_spans);
         let border_color = if focused { theme.border_focused }
             else if stale { theme.stale }
             else { theme.border_default };
         let block = Block::default()
-            .title(title)
+            .title(title_line)
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border_color));

@@ -28,7 +28,7 @@ pub fn render_help(f: &mut Frame) {
  [W]        Pause / resume waterfall\n\
  [E]        Focus spectrum panel (expand / zoom)\n\
    Esc      Exit spectrum focus\n\
- [I]/[V]/[T] Focus lab panel: IQ / health / timing\n\
+ [I]/[V]/[T] Focus lab panel: IQ / vitals / timing\n\
  [?]        Toggle this help\n\
  [Tab]      Toggle footer bar\n\
 \n\
