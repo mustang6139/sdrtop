@@ -45,7 +45,7 @@ Everything your radio knows about itself, in real time, without leaving the term
 
 ### Scanning & field views
 - **Frequency sweep** — scan a band wider than one window can show; sdrtop retunes across it, stitches the result into a single curve with band-plan labels, and lets you press `Enter` on a peak to tune straight to it
-- **Micro field views** — compact single-glance read-outs (signal · gain · health · sweep) for tiny panes and cyberdeck screens
+- **Micro field views** — the deliberately tiny mode (`0`). The idea: sdrtop shouldn't need a full terminal to be useful. When it's squeezed into a slim tmux split, an SSH session on a phone, or the postage-stamp screen of a cyberdeck, the full panels stop being readable — so the micro views strip each concern down to a single glance (signal · gain · health · sweep) and let you cycle between them. One number that matters, big enough to read across the room. *(The layout of these is still getting a redesign — the purpose is locked, the pixels aren't.)*
 - **Signal strip** — one live bar with the essentials: P/NF · channel power · noise floor · ADC saturation · drops · buffer fill · IQ imbalance · RBW
 - **Observer mode** — if another app already holds the radio, sdrtop shows device identity, the owning process, and USB stats instead of falling over, then reclaims the device when it's free
 
@@ -171,6 +171,7 @@ You can also define your own `[presets.*]` layouts in the config — they merge 
 The feature set is in. So the whole focus has shifted to **making what's already here genuinely good**:
 
 - [ ] **UI polish** — layout, spacing, color, readability, and the small edge cases that make a TUI feel hand-built instead of merely functional
+- [ ] **Micro view redesign** — the field views (`0`) do their job, but the layout deserves a rethink: bigger, calmer, easier to read at a glance on a tiny screen
 - [ ] **Sharper radio math** — auditing and refining the derived measurements (NF, MDS, IRR, PAPR, sample-rate accuracy, timing) so the numbers are not just present but *trustworthy*
 - [ ] **Bug fixes** — hunting down the rough edges before piling on anything new
 
