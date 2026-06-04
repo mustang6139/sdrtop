@@ -11,11 +11,13 @@
 
 I didn't want to cut corners, so this definitely isn't a lazy `hackrf_info` clone. It delivers raw, real-time metrics (spectrum, waterfall, ADC health, gain chain) right inside the terminal. It's lightweight, distraction-free, and fits perfectly into a tmux pane, an SSH session, or the custom screen of your cyberdeck.
 
+It's a one-person project built in my spare time — and honestly, I made it for *you*. Use it however you like, beat on it, and don't be shy: open issues, dig through the code, and if you've got a good idea, send it my way as a pull request or just a message. This is an open table, not my private garage. (Fair warning: since it's a labor of love, you'll catch my sense of humor sprinkled through these docs. You'll live. Probably.)
+
 > [!IMPORTANT]
 > **Project Status:** `sdrtop` is currently in an **early development stage**. 
 > * At the moment, **it only supports the HackRF One**. Support for other devices is planned.
 > * The **interactive TUI is feature-complete** — spectrum, waterfall, the lab presets (IQ, RF, timing, signal, sweep), and the micro field-mode ecosystem are all in. Until **RTL-SDR support** lands, the focus is on **polishing the UI, sharpening the radio math, and fixing bugs** rather than new features.
-> * **Known Issues:** Plenty 😄... You might run into some performance issues.
+> * **Known Issues:** Plenty 😄 You might hit performance hiccups. If something looks broken, it's either a bug or an undocumented feature — flip a coin, then open an issue.
 
 ### 📖 Documentation
 
@@ -61,7 +63,7 @@ Everything your radio knows about itself, in real time, without leaving the term
 - **Six themes** — `sdr` · `nord` · `dracula` · `gruvbox` · `catppuccin` · `solarized`
 - **Layout presets** — general + specialised lab layouts; switch on the fly with the number keys, cycle with `p`, or define your own in the config
 
-> Every lab panel marks itself **[STALE]** the moment RX stops, so a frozen number is never mistaken for a live one.
+> Every lab panel marks itself **[STALE]** the moment RX stops, so a frozen number is never mistaken for a live one. Because the only thing worse than no data is confidently wrong data.
 
 ---
 
@@ -126,7 +128,7 @@ Press `Space` to start receiving. Press `?` for the key reference. Press `q` to 
 
 ## Config
 
-Everything is saved automatically to `~/.config/sdrtop/config.toml` when you quit, and hand-editing is safe — a missing or broken file just falls back to defaults.
+Everything is saved automatically to `~/.config/sdrtop/config.toml` when you quit, and hand-editing is safe — a missing or broken file just falls back to defaults. Go ahead, mangle it; the parser has seen worse.
 
 ```toml
 [radio]
@@ -174,7 +176,7 @@ base = "nord"
 | HackRF Pro                             | 🔲 Planned        | Needs hardware                            |
 | LimeSDR / bladeRF / SDRplay / PlutoSDR | 🔲 Planned        | Needs hardware                            |
 
-> Hardware support is added only after physical testing on real devices - no guessing from datasheets.
+> Hardware support is added only after physical testing on real devices — no guessing from datasheets. (Translation: the list moves at exactly the speed of my hobby budget.)
 
 ---
 
@@ -221,6 +223,36 @@ The more expensive hardware (Airspy, LimeSDR, SDRplay) I'm saving toward as well
 No pressure, but if this scratches an itch for you, this is where it goes.
 
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/mustang6139)
+
+---
+
+<details>
+<summary>📡 <i>(pst… you scrolled this far, might as well)</i></summary>
+
+<br>
+
+```
+               .
+              /=\
+         (    |#|    )
+        ((    |#|    ))
+       (((    |#|    )))
+        ((    |#|    ))
+         (    |#|    )
+               |#|
+              /|#|\
+             / |#| \
+            /  |#|  \
+           /___|#|___\
+          /    |#|    \
+         '''''''''''''''
+```
+
+Yep, it's a radio tower. I'm a simple man — I see free time, I make ASCII art.
+
+**73 de sdrtop** — ham-speak for "catch you later." 📻
+
+</details>
 
 ---
 
