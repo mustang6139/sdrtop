@@ -11,7 +11,7 @@ A plain-language summary of recent changes. Full technical details are in the [d
 > **Where the project is:** the interactive TUI is now feature-complete. Until support for the **RTL-SDR** dongle lands, the focus is on **fixing bugs and polishing the UI** rather than adding features — so if something looks off or behaves oddly, that's exactly what we're hunting now.
 
 ### Frequency scanner — Lab Sweep & micro sweep
-A new scanner sweeps a band wider than one window can show, stitching the result into a single curve with band-plan labels. Open it with `9` (**Lab Sweep**) or as the last step of the `0` micro cycle. Set the band right in the panel (`g` to focus, then `[` / `]` for start / stop), and press `Enter` on a signal to tune straight to it. See **[The Lab Presets](lab.md)** (Sweep section) and **[Configuration → Sweep scanner](config.md#sweep-scanner)**.
+A new scanner sweeps a band wider than one window can show, stitching the result into a single curve with band-plan labels. Open it with `9` (**Lab Sweep**) or as the last step of the `0` micro cycle. Set the band right in the panel (`g` to focus, then `s` / `e` for start / end), and press `Enter` on a signal to tune straight to it. See **[The Lab Presets](lab.md)** (Sweep section) and **[Configuration → Sweep scanner](config.md#sweep-scanner)**.
 
 ### Lab presets — bench-engineer views
 The lab presets (`5`–`8`: IQ, RF, timing, signal) carry a full set of derived measurements aimed at serious capture work. See **[The Lab Presets](lab.md)** for the complete walkthrough.

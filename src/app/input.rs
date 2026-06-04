@@ -431,13 +431,13 @@ fn handle_sweep_focus(
             let d = m.sweep.config.dwell_ms;
             m.push_log(format!("Sweep dwell → {} ms", d));
         }
-        KeyCode::Char('[') => {
+        KeyCode::Char('s') => {
             let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
             m.ui.input_mode = InputMode::SweepStartInput;
             m.ui.input_buf.clear();
             m.push_log("Enter sweep START frequency in MHz, then Enter");
         }
-        KeyCode::Char(']') => {
+        KeyCode::Char('e') => {
             let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
             m.ui.input_mode = InputMode::SweepStopInput;
             m.ui.input_buf.clear();

@@ -29,7 +29,7 @@ impl Panel for SweepPanel {
     fn min_size(&self) -> (u16, u16) { (40, 10) }
     fn focus_key(&self) -> Option<char> { Some('g') }
     fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
-        &[("←/→", "Cursor"), ("[/]", "Start/Stop"), ("M", "Peak/Mean"), ("+/-", "Dwell"), ("Enter", "Tune here")]
+        &[("←/→", "Cursor"), ("S/E", "Start/End"), ("M", "Peak/Mean"), ("+/-", "Dwell"), ("Enter", "Tune here")]
     }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {

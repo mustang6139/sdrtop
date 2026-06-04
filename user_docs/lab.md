@@ -125,8 +125,9 @@ from the band plan, and the cursor reads out the level and band at any point.
 
 Because a full cycle takes a couple of seconds, sweep is for *finding* a signal,
 not watching it — once you spot one, focus the panel with `g` and press `Enter`
-to tune straight to the cursor frequency in normal RX. Set the band and dwell in
-the config (see [Configuration → Sweep scanner](config.md#sweep-scanner)). The
+to tune straight to the cursor frequency in normal RX. While focused, `s` / `e`
+set the start / end frequency live and `+` / `-` adjust the dwell; the band and
+dwell also live in the config (see [Configuration → Sweep scanner](config.md#sweep-scanner)). The
 `micro_sweep` step in the `0` cycle gives the same scan as a compact field list.
 
 ---
