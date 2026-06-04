@@ -17,7 +17,15 @@ I didn't want to cut corners, so this definitely isn't a lazy `hackrf_info` clon
 > * The **interactive TUI is feature-complete** — spectrum, waterfall, the lab presets (IQ, RF, timing, signal, sweep), and the micro field-mode ecosystem are all in. Until **RTL-SDR support** lands, the focus is on **polishing the UI, sharpening the radio math, and fixing bugs** rather than new features.
 > * **Known Issues:** Plenty 😄... You might run into some performance issues.
 
-**[Full user guide](user_docs/README.md)**
+### 📖 Documentation
+
+**[→ Full user guide](user_docs/README.md)** — everything below, in depth. Or jump straight to:
+
+| | | |
+|---|---|---|
+| [Getting started](user_docs/getting-started.md) — install & run | [Keyboard shortcuts](user_docs/keys.md) — every key | [What's on screen](user_docs/screens.md) — panels explained |
+| [The Lab presets](user_docs/lab.md) — the bench-engineer views | [Configuration](user_docs/config.md) — config.toml & custom layouts | [Themes](user_docs/themes.md) — the six palettes |
+| [Tips & tricks](user_docs/tips-and-tricks.md) — gain, markers, workflows | [Troubleshooting](user_docs/troubleshooting.md) — when things go sideways | [What's new](user_docs/whats-new.md) — the checkpoint log |
 
 ---
 
@@ -45,7 +53,7 @@ Everything your radio knows about itself, in real time, without leaving the term
 
 ### Scanning & field views
 - **Frequency sweep** — scan a band wider than one window can show; sdrtop retunes across it, stitches the result into a single curve with band-plan labels, and lets you press `Enter` on a peak to tune straight to it
-- **Micro field views** — the deliberately tiny mode (`0`). The idea: sdrtop shouldn't need a full terminal to be useful. When it's squeezed into a slim tmux split, an SSH session on a phone, or the postage-stamp screen of a cyberdeck, the full panels stop being readable — so the micro views strip each concern down to a single glance (signal · gain · health · sweep) and let you cycle between them. One number that matters, big enough to read across the room. *(The layout of these is still getting a redesign — the purpose is locked, the pixels aren't.)*
+- **Micro field views** — the deliberately tiny mode (`0`). The idea: sdrtop shouldn't need a full terminal to be useful. When it's squeezed into a slim tmux split, an SSH session on a phone, or the postage-stamp screen of a cyberdeck, the full panels stop being readable — so the micro views strip each concern down to a single glance (signal · gain · health · sweep) and let you cycle between them. One number that matters, big enough to read across the room. *(Heads up: the looks are still cooking — the idea's solid, the pixels are a work in progress.)*
 - **Signal strip** — one live bar with the essentials: P/NF · channel power · noise floor · ADC saturation · drops · buffer fill · IQ imbalance · RBW
 - **Observer mode** — if another app already holds the radio, sdrtop shows device identity, the owning process, and USB stats instead of falling over, then reclaims the device when it's free
 
@@ -118,35 +126,40 @@ Press `Space` to start receiving. Press `?` for the key reference. Press `q` to 
 
 ## Config
 
-Saved automatically to `~/.config/sdrtop/config.toml` on quit. Hand-editing is safe.
+Everything is saved automatically to `~/.config/sdrtop/config.toml` when you quit, and hand-editing is safe — a missing or broken file just falls back to defaults.
 
 ```toml
 [radio]
-frequency_hz = 92800000
-sample_rate  = 2000000.0
+frequency_hz = 92800000      # tuned center frequency
+sample_rate  = 2000000.0     # 2–20 MHz
 lna_gain     = 24
 vga_gain     = 30
 amp_enabled  = false
 
 [display]
-active_preset      = "main"
+active_preset      = "spectrum_waterfall"
 waterfall_max_rows = 64
 
-# Spectrum markers persist here
+# Spectrum markers persist here, one block each
 [[display.spectrum_markers]]
 freq_hz = 92800000
 label   = "FM Radio"
 
+[sweep]
+start_hz = 400000000         # frequency scanner: band start
+stop_hz  = 500000000         # band end
+dwell_ms = 200               # measure time per step (50–2000)
+
 [theme]
 base = "nord"
-# optional per-field overrides
+# optional per-field overrides:
 # border_accent = "#88c0d0"
 # value_hi      = "#ebcb8b"
 ```
 
-Available themes: `sdr` (default) · `nord` · `dracula` · `gruvbox` · `catppuccin` · `solarized`
+**Themes:** `sdr` (default) · `nord` · `dracula` · `gruvbox` · `catppuccin` · `solarized` — see [Themes](user_docs/themes.md).
 
-You can also define your own `[presets.*]` layouts in the config — they merge with the built-ins and survive a save. See [user_docs/config.md](user_docs/config.md#custom-layout-presets).
+**Custom layouts:** define your own `[presets.*]` blocks and they merge with the built-ins, surviving every save. Full reference in [Configuration](user_docs/config.md#custom-layout-presets).
 
 ---
 
@@ -175,7 +188,7 @@ The feature set is in. So the whole focus has shifted to **making what's already
 - [ ] **Sharper radio math** — auditing and refining the derived measurements (NF, MDS, IRR, PAPR, sample-rate accuracy, timing) so the numbers are not just present but *trustworthy*
 - [ ] **Bug fixes** — hunting down the rough edges before piling on anything new
 
-No new headline features land until this list feels done. *(2026 resolution: fewer features, more taste.)*
+No shiny new features until this list feels done. Quality arc, not a feature sprint. ✨
 
 ### Next big thing
 - [ ] **RTL-SDR support** — R820T / R828D / E4000, the most common dongle on Earth and the single highest-impact addition this project can make

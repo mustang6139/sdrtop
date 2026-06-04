@@ -2,7 +2,7 @@
 
 ← [Back](README.md)
 
-The story of sdrtop so far — not as a wall of dates, but as **checkpoints**: the big moments where the app levelled up. Each one is condensed to the essentials. Full technical detail lives in the [developer changelog](../dev_docs/CHANGELOG.md).
+The story of sdrtop so far — not as a wall of dates, but as **checkpoints**: the big moments where the app levelled up. Each one is condensed to the essentials.
 
 > **Where we are now:** the interactive TUI is feature-complete. The current checkpoint is all about **polishing the UI, sharpening the radio math, and squashing bugs** — until **RTL-SDR** support lands. So if something looks off or behaves oddly, that's exactly what we're hunting.
 

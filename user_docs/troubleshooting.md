@@ -221,7 +221,7 @@ This is rare, but if it happens:
 
 If you've tried these steps and something still isn't working:
 
-1. **Check the [developer changelog](../dev_docs/CHANGELOG.md)** for recent fixes or known issues.
+1. **Check [What's new](whats-new.md)** for recent changes that might be relevant.
 2. **Run with verbose output (if supported).** Future versions will have a debug mode; for now, the app logs go to the in-app log.
 3. **Collect info:** Sample rate, HackRF firmware version (`firmware` shown at bottom of screen), host OS, CPU type, and steps to reproduce.
 4. **Report on GitHub** with as much detail as possible.
