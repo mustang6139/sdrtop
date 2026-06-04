@@ -25,6 +25,7 @@ pub mod sample_rate;
 pub mod signal_metrics;
 pub mod signal_strip;
 pub mod spectrum;
+pub mod spectrum_bars;
 pub mod sweep_panel;
 pub mod sweep_strip;
 pub mod system_resources;
