@@ -32,9 +32,29 @@ It's a one-person project built in my spare time — and honestly, I made it for
 
 ---
 
-## Video
+## Gallery
 
-![](/user_docs/pics/sdrtop.gif)
+![sdrtop in motion](/user_docs/pics/sdrtop.gif)
+
+Screenshots, split by device — more to come. Got a clean capture on your hardware? Drop it in [`user_docs/pics/`](user_docs/pics/) and send a PR (RTL-SDR shots from different tuners especially welcome).
+
+### HackRF One
+ 
+<table>
+  <tr>
+    <td width="50%"><img src="user_docs/pics/hackrf/hackrf1.png" alt="HackRF — spectrum & waterfall"></td>
+    <td width="50%"><img src="user_docs/pics/hackrf/hackrf2.png" alt="HackRF — lab presets"></td>
+  </tr>
+</table>
+
+### RTL-SDR
+
+<table>
+  <tr>
+    <td width="50%"><img src="user_docs/pics/rtlsdr/rtl-sdr1.png" alt="RTL-SDR — spectrum & waterfall"></td>
+    <td width="50%"><img src="user_docs/pics/rtlsdr/rtl-sdr2.png" alt="RTL-SDR — observer mode"></td>
+  </tr>
+</table>
 
 ---
 
