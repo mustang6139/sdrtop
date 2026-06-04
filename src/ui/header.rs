@@ -49,12 +49,14 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
     // Standard HackRF firmware ("2024.02.1", "git-...") → label as "hackrf fw "
     // Both labels are exactly 10 chars so top_band_gap stays valid.
     // Firmware field. RTL-SDR has no on-device firmware (it's host-driven by
-    // librtlsdr), so it gets a neutral label instead of "hackrf fw". All labels
-    // are exactly 10 columns so top_band_gap stays valid.
-    let (fw_val, fw_label): (std::sync::Arc<str>, &str) = if state.observer.active {
+    // librtlsdr), so it gets a neutral label instead of "hackrf fw" — including
+    // in observer mode. All labels are exactly 10 columns so top_band_gap stays
+    // valid.
+    let (fw_val, fw_label): (std::sync::Arc<str>, &str) = if state.caps.gain.is_single() {
+        let v = if state.observer.active { "—" } else { "librtlsdr" };
+        (std::sync::Arc::from(v), "rtl-sdr   ")
+    } else if state.observer.active {
         (std::sync::Arc::from("—"), "hackrf fw ")
-    } else if state.caps.gain.is_single() {
-        (std::sync::Arc::from("librtlsdr"), "rtl-sdr   ")
     } else {
         let is_mayhem = state.system.fw_version.starts_with("n_")
             || (state.system.fw_version.starts_with('v')

@@ -268,6 +268,12 @@ pub fn list() -> Vec<DeviceListing> {
     out
 }
 
+/// Capability profile for observer mode, where no device handle is available to
+/// query the tuner. Assumes the common R820T span with an empty gain table.
+pub fn observer_caps() -> DeviceCapabilities {
+    rtl_caps(5, &[])
+}
+
 fn rtl_caps(tuner: c_int, gains_tenths: &[i32]) -> DeviceCapabilities {
     // Frequency span depends on the tuner; the dominant R820T/R828D case covers
     // 24 MHz–1.766 GHz. E4000 reaches higher (with an internal gap we ignore).

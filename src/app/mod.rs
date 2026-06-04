@@ -37,10 +37,16 @@ impl App {
         match hardware::open_device(listing) {
             Ok(device) => Self::new_normal(cfg, config_path, device),
             Err(open_err) => {
-                let Some(sysinfo) = hardware::sysfs::find_hackrf() else {
+                // Device is present but couldn't be opened (e.g. busy) — fall back
+                // to read-only observer mode via the matching backend's sysfs scan.
+                let sysinfo = match listing.kind {
+                    hardware::DeviceKind::HackRf => hardware::sysfs::find_hackrf(),
+                    hardware::DeviceKind::RtlSdr => hardware::sysfs::find_rtlsdr(),
+                };
+                let Some(sysinfo) = sysinfo else {
                     return Err(open_err);
                 };
-                Self::new_observer(cfg, config_path, sysinfo)
+                Self::new_observer(cfg, config_path, sysinfo, listing.kind)
             }
         }
     }

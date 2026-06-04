@@ -24,21 +24,29 @@ use std::io;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "sdrtop", about = "HackRF One / PortaPack terminal monitor")]
+#[command(name = "sdrtop", about = "HackRF One / RTL-SDR terminal monitor")]
 struct Cli {
     /// Path to config file (default: ~/.config/sdrtop/config.toml)
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
 
+    /// Pick the backend when more than one device type is connected
+    #[arg(long, value_name = "hackrf|rtlsdr")]
+    device: Option<String>,
+
     /// Center frequency in Hz, e.g. 433920000 (overrides config)
     #[arg(long, value_name = "HZ")]
     frequency: Option<u64>,
 
-    /// LNA gain in dB, 0–40 step 8 (overrides config)
+    /// Primary front-end gain in dB — HackRF LNA / RTL-SDR tuner (overrides config)
+    #[arg(long, value_name = "DB")]
+    gain: Option<u32>,
+
+    /// HackRF LNA gain in dB, 0–40 step 8 (overrides config)
     #[arg(long)]
     lna: Option<u32>,
 
-    /// VGA gain in dB, 0–62 step 2 (overrides config)
+    /// HackRF VGA gain in dB, 0–62 step 2 (overrides config)
     #[arg(long)]
     vga: Option<u32>,
 
@@ -108,11 +116,25 @@ async fn main() -> Result<()> {
     if let Some(f) = cli.frequency { app_cfg.radio.frequency_hz = f; }
     if let Some(l) = cli.lna       { app_cfg.radio.lna_gain = l.min(40); }
     if let Some(v) = cli.vga       { app_cfg.radio.vga_gain = v.min(62); }
+    // --gain is the device-agnostic primary gain (applied after --lna so it wins);
+    // the device clamps/snaps it at program time (HackRF LNA range, RTL nearest step).
+    if let Some(g) = cli.gain      { app_cfg.radio.lna_gain = g; }
     if let Some(t) = cli.theme     { app_cfg.theme.base = t; }
 
     let theme = app_cfg.build_theme();
 
-    let devices = hardware::list_all_devices();
+    let mut devices = hardware::list_all_devices();
+    if let Some(kind) = &cli.device {
+        let want = match kind.to_ascii_lowercase().as_str() {
+            "hackrf"                     => hardware::DeviceKind::HackRf,
+            "rtlsdr" | "rtl-sdr" | "rtl" => hardware::DeviceKind::RtlSdr,
+            other => {
+                eprintln!("Unknown --device '{}' (use 'hackrf' or 'rtlsdr')", other);
+                std::process::exit(1);
+            }
+        };
+        devices.retain(|d| d.kind == want);
+    }
     if devices.is_empty() {
         eprintln!("No SDR device found. Connect a HackRF or RTL-SDR and try again.");
         std::process::exit(1);

@@ -1,19 +1,23 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::hardware;
+use crate::hardware::{self, DeviceKind};
 use crate::state::SdrMetrics;
 use super::fmt_duration;
 
-/// Polls sysfs/proc every 1 s to track which process owns the HackRF device
+/// Polls sysfs/proc every 1 s to track which process owns the SDR device
 /// (observer mode only).  Writes device identity and owner info to `state`.
-pub fn spawn_observer_task(state: Arc<Mutex<SdrMetrics>>, bus: u32, dev: u32) {
+pub fn spawn_observer_task(state: Arc<Mutex<SdrMetrics>>, bus: u32, dev: u32, kind: DeviceKind) {
     tokio::spawn(async move {
         let ticks_per_sec = unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as f64;
         let mut last_owner_cpu: Option<(u64, Instant)> = None;
 
         loop {
-            if let Some(info) = hardware::sysfs::find_hackrf() {
+            let found = match kind {
+                DeviceKind::HackRf => hardware::sysfs::find_hackrf(),
+                DeviceKind::RtlSdr => hardware::sysfs::find_rtlsdr(),
+            };
+            if let Some(info) = found {
                 let owner = hardware::sysfs::find_owner(info.bus, info.dev);
                 let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
 

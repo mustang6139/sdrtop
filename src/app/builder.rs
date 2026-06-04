@@ -226,6 +226,7 @@ impl App {
         cfg: AppConfig,
         config_path: Option<PathBuf>,
         sysinfo: hardware::sysfs::HackRfSysInfo,
+        kind: hardware::DeviceKind,
     ) -> anyhow::Result<Self> {
         let board_name = sysinfo.product.clone();
         let serial     = sysinfo.serial.clone();
@@ -295,9 +296,12 @@ impl App {
                 ..SweepState::default()
             },
             ui:  UiState::default(),
-            // Observer mode currently only watches a busy HackRF, so its UI uses
-            // the HackRF capability profile.
-            caps: Arc::new(hardware::hackrf::caps()),
+            // Observer mode has no open device to query; use the matching
+            // backend's capability profile so the UI labels stay correct.
+            caps: Arc::new(match kind {
+                hardware::DeviceKind::HackRf => hardware::hackrf::caps(),
+                hardware::DeviceKind::RtlSdr => hardware::rtlsdr::observer_caps(),
+            }),
             acc: Accumulators::default(),
         }));
 
@@ -307,7 +311,7 @@ impl App {
             m.push_log("Device is in use by another process — hardware controls disabled");
         }
 
-        tasks::spawn_observer_task(Arc::clone(&state), sysinfo.bus, sysinfo.dev);
+        tasks::spawn_observer_task(Arc::clone(&state), sysinfo.bus, sysinfo.dev, kind);
         tasks::spawn_sys_resource_task(Arc::clone(&state));
 
         let (engine, focus_keys) = Self::build_ui(&board_name, &serial, "observer", &cfg.presets);
