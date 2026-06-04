@@ -4,10 +4,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        canvas::{Canvas, Line as CanvasLine, Points},
-        Block, BorderType, Borders, Paragraph,
-    },
+    widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
 
@@ -15,6 +12,7 @@ use crate::palette::{magnitude_to_color_themed, ColorDepth};
 use crate::state::SdrMetrics;
 use crate::ui::band_plan::BAND_PLAN;
 use crate::ui::panel::Panel;
+use crate::ui::spectrum_bars::{self, Bar, Overlays, VLine};
 
 // ── Spectrum step sizes ───────────────────────────────────────────────────────
 
@@ -51,12 +49,6 @@ fn fmt_khz(hz: u64) -> String {
 pub fn fmt_spectrum_step(hz: u64) -> String {
     if hz >= 1_000_000 { format!("{} MHz", hz / 1_000_000) }
     else { format!("{} kHz", hz / 1_000) }
-}
-
-fn freq_to_canvas_x(freq_hz: f64, left_hz: f64, bw: f64, n: f64) -> Option<f64> {
-    if bw <= 0.0 { return None; }
-    let frac = (freq_hz - left_hz) / bw;
-    if (0.0..=1.0).contains(&frac) { Some(frac * (n - 1.0)) } else { None }
 }
 
 pub struct SpectrumPanel;
@@ -150,7 +142,6 @@ impl Panel for SpectrumPanel {
 
                 let n_bins = frame.bins_dbfs.len();
                 if n_bins == 0 { return; }
-                let n = n_bins as f64;
                 let bw = frame.sample_rate;
                 if bw <= 0.0 { return; }
                 let left_hz  = frame.center_freq_hz as f64 - bw / 2.0;
@@ -159,8 +150,6 @@ impl Panel for SpectrumPanel {
                 // Dynamic y-range from state (user-controlled zoom)
                 let y_min_f = state.spectrum.y_min;
                 let y_max_f = state.spectrum.y_max;
-                let y_min   = y_min_f as f64;
-                let y_max   = y_max_f as f64;
 
                 let depth = ColorDepth::detect();
                 // Arc::clone is O(1) — no data copied
@@ -168,65 +157,10 @@ impl Panel for SpectrumPanel {
                 let peaks = Arc::clone(&frame.peak_hold);
                 let noise_floor = frame.noise_floor;
 
-                // Per-bin colors pre-computed outside the closure (closure can't borrow Theme)
-                let bin_colors: Vec<ratatui::style::Color> = bins.iter()
-                    .map(|&db| magnitude_to_color_themed(db, y_min_f, y_max_f, depth, theme))
-                    .collect();
-                let peak_hold_color   = theme.peak_hold;
-                let noise_floor_color = theme.noise_floor;
-
                 // Hold ghost: Arc clone, O(1)
                 let held_bins = state.spectrum.hold.clone();
-                let hold_color = theme.border_dim;
 
-                // Cursor: canvas x-coordinate (0..n-1)
-                let cursor_x_canvas = state.spectrum.cursor_freq.and_then(|cf| {
-                    let frac = (cf as f64 - left_hz) / bw;
-                    if (0.0..=1.0).contains(&frac) { Some(frac * (n - 1.0)) } else { None }
-                });
-                let cursor_color = theme.value_hi;
-
-                // Marker canvas x-coordinates + optional BW boundary pairs
-                struct MarkerCanvas {
-                    x:      Option<f64>,
-                    bw_lo:  Option<f64>,
-                    bw_hi:  Option<f64>,
-                }
-                let marker_data: Vec<MarkerCanvas> = state.spectrum.markers.iter()
-                    .filter_map(|mk| {
-                        let x = freq_to_canvas_x(mk.freq_hz as f64, left_hz, bw, n);
-                        let (bw_lo, bw_hi) = if let Some(ch_bw) = mk.channel_bw_hz {
-                            let half = ch_bw as f64 / 2.0;
-                            let lo_frac = (mk.freq_hz as f64 - half - left_hz) / bw;
-                            let hi_frac = (mk.freq_hz as f64 + half - left_hz) / bw;
-                            (
-                                if (0.0..=1.0).contains(&lo_frac) { Some(lo_frac * (n - 1.0)) } else { None },
-                                if (0.0..=1.0).contains(&hi_frac) { Some(hi_frac * (n - 1.0)) } else { None },
-                            )
-                        } else {
-                            (None, None)
-                        };
-
-                        let overlaps_view = if let Some(ch_bw) = mk.channel_bw_hz {
-                            let half = ch_bw as f64 / 2.0;
-                            let lo_frac = (mk.freq_hz as f64 - half - left_hz) / bw;
-                            let hi_frac = (mk.freq_hz as f64 + half - left_hz) / bw;
-                            lo_frac <= 1.0 && hi_frac >= 0.0
-                        } else {
-                            x.is_some()
-                        };
-
-                        if overlaps_view {
-                            Some(MarkerCanvas { x, bw_lo, bw_hi })
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                let marker_color    = theme.status_warn;
-                let bw_border_color = theme.border_accent;
-
-                // Cursor power (read before closure)
+                // Cursor power
                 let cursor_power: Option<f32> = state.spectrum.cursor_freq.and_then(|cf| {
                     let frac = (cf as f64 - left_hz) / bw;
                     if (0.0..=1.0).contains(&frac) {
@@ -237,70 +171,70 @@ impl Panel for SpectrumPanel {
                 let cursor_freq_mhz = state.spectrum.cursor_freq
                     .map(|f| f as f64 / 1_000_000.0);
 
-                // ── Canvas ────────────────────────────────────────────────
-                f.render_widget(
-                    Canvas::default()
-                        .x_bounds([0.0, n - 1.0])
-                        .y_bounds([y_min, y_max])
-                        .paint(move |ctx| {
-                            // 1. Hold ghost (behind live signal)
-                            if let Some(ref held) = held_bins {
-                                for i in 1..held.len() {
-                                    let y0 = held[i - 1].clamp(y_min_f, y_max_f) as f64;
-                                    let y1 = held[i].clamp(y_min_f, y_max_f) as f64;
-                                    ctx.draw(&CanvasLine {
-                                        x1: (i - 1) as f64, y1: y0,
-                                        x2: i as f64,       y2: y1,
-                                        color: hold_color,
-                                    });
-                                }
+                // ── Block-bar render (replaces braille Canvas) ────────────
+                let width = canvas_area.width as usize;
+                if width > 0 {
+                    let col_db   = spectrum_bars::downsample_max(&bins, width);
+                    let col_peak = spectrum_bars::downsample_max(&peaks, width);
+                    let col_hold = held_bins
+                        .as_ref()
+                        .map(|h| spectrum_bars::downsample_max(h, width))
+                        .unwrap_or_default();
+
+                    let bars: Vec<Bar> = col_db
+                        .iter()
+                        .map(|&db| Bar {
+                            db,
+                            color: magnitude_to_color_themed(db, y_min_f, y_max_f, depth, theme),
+                        })
+                        .collect();
+
+                    let freq_to_col = |freq_hz: f64| -> Option<u16> {
+                        let frac = (freq_hz - left_hz) / bw;
+                        if (0.0..=1.0).contains(&frac) {
+                            Some(((frac * (width.saturating_sub(1)) as f64).round() as usize)
+                                .min(width - 1) as u16)
+                        } else {
+                            None
+                        }
+                    };
+
+                    let mut vlines: Vec<VLine> = Vec::new();
+                    for mk in &state.spectrum.markers {
+                        if let Some(c) = freq_to_col(mk.freq_hz as f64) {
+                            vlines.push(VLine { col: c, color: theme.status_warn });
+                        }
+                        if let Some(ch_bw) = mk.channel_bw_hz {
+                            let half = ch_bw as f64 / 2.0;
+                            if let Some(c) = freq_to_col(mk.freq_hz as f64 - half) {
+                                vlines.push(VLine { col: c, color: theme.border_accent });
                             }
-                            // 2. Filled columns
-                            for i in 0..bins.len() {
-                                let y_top = bins[i].clamp(y_min_f, y_max_f) as f64;
-                                ctx.draw(&CanvasLine {
-                                    x1: i as f64, y1: y_min,
-                                    x2: i as f64, y2: y_top,
-                                    color: bin_colors[i],
-                                });
+                            if let Some(c) = freq_to_col(mk.freq_hz as f64 + half) {
+                                vlines.push(VLine { col: c, color: theme.border_accent });
                             }
-                            // 3. Outline
-                            for i in 1..bins.len() {
-                                let y0 = bins[i - 1].clamp(y_min_f, y_max_f) as f64;
-                                let y1 = bins[i].clamp(y_min_f, y_max_f) as f64;
-                                ctx.draw(&CanvasLine {
-                                    x1: (i - 1) as f64, y1: y0,
-                                    x2: i as f64,       y2: y1,
-                                    color: bin_colors[i - 1],
-                                });
-                            }
-                            // 4. Peak hold
-                            for (i, &db) in peaks.iter().enumerate() {
-                                let y = db.clamp(y_min_f, y_max_f) as f64;
-                                ctx.draw(&Points { coords: &[(i as f64, y)], color: peak_hold_color });
-                            }
-                            // 5. Noise floor
-                            let nf = noise_floor.clamp(y_min_f, y_max_f) as f64;
-                            ctx.draw(&CanvasLine { x1: 0.0, y1: nf, x2: n - 1.0, y2: nf, color: noise_floor_color });
-                            // 6. Marker lines + channel BW boundaries
-                            for md in &marker_data {
-                                if let Some(cx) = md.x {
-                                    ctx.draw(&CanvasLine { x1: cx, y1: y_min, x2: cx, y2: y_max, color: marker_color });
-                                }
-                                if let Some(lo) = md.bw_lo {
-                                    ctx.draw(&CanvasLine { x1: lo, y1: y_min, x2: lo, y2: y_max, color: bw_border_color });
-                                }
-                                if let Some(hi) = md.bw_hi {
-                                    ctx.draw(&CanvasLine { x1: hi, y1: y_min, x2: hi, y2: y_max, color: bw_border_color });
-                                }
-                            }
-                            // 7. Cursor line
-                            if let Some(cx) = cursor_x_canvas {
-                                ctx.draw(&CanvasLine { x1: cx, y1: y_min, x2: cx, y2: y_max, color: cursor_color });
-                            }
-                        }),
-                    canvas_area,
-                );
+                        }
+                    }
+                    if let Some(cf) = state.spectrum.cursor_freq {
+                        if let Some(c) = freq_to_col(cf as f64) {
+                            vlines.push(VLine { col: c, color: theme.value_hi });
+                        }
+                    }
+
+                    let ov = Overlays {
+                        bar_db:      &col_db,
+                        peak_db:     &col_peak,
+                        hold_db:     &col_hold,
+                        vlines:      &vlines,
+                        noise_floor,
+                        peak_color:  theme.peak_hold,
+                        hold_color:  theme.border_dim,
+                        noise_color: theme.noise_floor,
+                    };
+
+                    let buf = f.buffer_mut();
+                    spectrum_bars::paint_bars(buf, canvas_area, &bars, y_min_f, y_max_f);
+                    spectrum_bars::paint_overlays(buf, canvas_area, &ov, y_min_f, y_max_f);
+                }
 
                 // ── Band plan overlay (text on top of canvas, top row) ────
                 if canvas_area.height >= 2 && canvas_area.width > 4 {
