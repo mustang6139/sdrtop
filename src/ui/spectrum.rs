@@ -224,14 +224,18 @@ impl Panel for SpectrumPanel {
                     }
 
                     let buf = f.buffer_mut();
+                    // Full-brightness palette for braille ⣿ interior fg.
+                    // Interior cells are rendered as braille characters (not bg-colored
+                    // blocks), so the full vivid palette colors are appropriate here.
+                    let fill_fn = |t: f32| theme.palette_color(t);
                     spectrum_bars::paint_braille(
                         buf, canvas_area, &bars,
                         &col_peak, &col_hold, noise_floor,
                         y_min_f, y_max_f,
-                        theme.palette_color(0.0),  // fill: cold end — very dark, near-black
-                        theme.peak_hold,            // peak hold caps: vivid gold/yellow
-                        theme.border_default,       // hold ghost caps: subtly visible
-                        theme.label,                // noise floor dashes: readable dim
+                        fill_fn,
+                        theme.peak_hold,      // peak hold caps: vivid gold/yellow
+                        theme.border_default, // hold ghost caps: subtly visible
+                        theme.label,          // noise floor dashes: readable dim
                     );
                     spectrum_bars::paint_vlines(buf, canvas_area, &vlines, &bars, y_min_f, y_max_f);
                 }

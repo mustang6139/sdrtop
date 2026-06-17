@@ -115,7 +115,12 @@ fn signal_floor_rows(db: f32, y_min: f32, y_max: f32, rows: u32) -> u32 {
 /// `bars` must have length `area.width as usize * 2` — two braille columns per
 /// terminal column for 2× horizontal resolution.  `peak_db` and `hold_db` may
 /// be empty or shorter than `bars`; missing slots are treated as `y_min`.
-pub fn paint_braille(
+///
+/// `fill_fn` receives a signal-level fraction (0.0 = bottom / y_min,
+/// 1.0 = top / y_max) and returns the background color for that height.
+/// Called at `0.0` for the canvas pre-fill and at the cell's level for fill
+/// cells.  Use a dimmed palette gradient for best results.
+pub fn paint_braille<F>(
     buf:         &mut Buffer,
     area:        Rect,
     bars:        &[Bar],
@@ -124,17 +129,35 @@ pub fn paint_braille(
     noise_floor: f32,
     y_min:       f32,
     y_max:       f32,
-    fill_color:  Color,
+    fill_fn:     F,
     peak_color:  Color,
     hold_color:  Color,
     noise_color: Color,
-) {
+) where F: Fn(f32) -> Color {
     let rows = area.height as u32;
     let cols = area.width as u32;
     if rows == 0 || cols == 0 || y_max <= y_min { return; }
     let total_dots = rows * 4;
 
-    // ── Live signal: fill + braille trace ────────────────────────────────
+    // ── Canvas background ────────────────────────────────────────────────
+    // Pre-fill with a very dark version of the palette cold end so the panel
+    // looks like a dark SA display but the colored braille dots (set_fg) always
+    // have visible contrast against the background.
+    let canvas_bg = match fill_fn(0.0) {
+        Color::Rgb(r, g, b) => Color::Rgb(r / 5, g / 5, b / 5),
+        c => c,
+    };
+    for cy in 0..rows {
+        for cx in 0..cols {
+            buf.get_mut(area.x + cx as u16, area.y + cy as u16).set_bg(canvas_bg);
+        }
+    }
+
+    // ── Live signal: braille interior + braille trace ─────────────────────
+    // ALL signal cells use braille characters with fg=palette gradient.
+    // Interior (fully-cleared) cells: ⣿ (all 8 dots) — no bg override, so the
+    // braille dot texture stays visible rather than looking like a solid block.
+    // Trace (edge) cells: partial braille with the accent trace color.
     for cy in 0..rows {
         let base = (rows - 1 - cy) * 4;   // effective dot row at BOTTOM of this cell
         let ty   = area.y + cy as u16;
@@ -153,15 +176,17 @@ pub fn paint_braille(
             let cell = buf.get_mut(tx, ty);
 
             if d_l > base + 3 && d_r > base + 3 {
-                // Fill cell: signal fully clears this cell → solid background.
-                cell.set_symbol(" ").set_bg(fill_color);
+                // Interior cell: signal completely fills this cell.
+                // Render as ⣿ (all-8-dot braille) with palette gradient fg so the
+                // braille dot texture remains visible — not a solid background block.
+                let level_frac = (base as f32 + 2.0) / total_dots as f32;
+                cell.set_symbol("⣿").set_fg(fill_fn(level_frac));
             } else {
                 // Trace cell: signal edge is inside this cell.
-                // Color from whichever braille column has its edge here.
                 let color = if d_l > base && d_l <= base + 4 {
-                    bars.get(ec_l).map(|b| b.trace_color).unwrap_or(fill_color)
+                    bars.get(ec_l).map(|b| b.trace_color).unwrap_or(canvas_bg)
                 } else {
-                    bars.get(ec_r).map(|b| b.trace_color).unwrap_or(fill_color)
+                    bars.get(ec_r).map(|b| b.trace_color).unwrap_or(canvas_bg)
                 };
                 let ch = char::from_u32(0x2800 | mask as u32).unwrap();
                 cell.set_symbol(&ch.to_string()).set_fg(color);
@@ -370,12 +395,12 @@ mod tests {
     fn paint_braille_empty_area_no_panic() {
         let mut buf = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 0, 0));
         paint_braille(&mut buf, Rect::new(0,0,0,0), &[], &[], &[], -80.0, -90.0, -20.0,
-            Color::Black, Color::White, Color::Gray, Color::Blue);
+            |_| Color::Black, Color::White, Color::Gray, Color::Blue);
     }
 
     #[test]
     fn paint_braille_max_signal_fills_canvas() {
-        // Signal at max → every cell should be a fill cell (bg set).
+        // Signal at max → every cell should be an interior braille cell (⣿ with fg color).
         let area = Rect::new(0, 0, 2, 2);
         let mut buf = ratatui::buffer::Buffer::empty(area);
         let bars: Vec<Bar> = vec![
@@ -385,19 +410,19 @@ mod tests {
             Bar { db: -20.0, trace_color: Color::Red },
         ];
         paint_braille(&mut buf, area, &bars, &[], &[], -200.0, -90.0, -20.0,
-            Color::DarkGray, Color::White, Color::Gray, Color::Blue);
-        // All cells should be fill (space + colored bg)
+            |_| Color::DarkGray, Color::White, Color::Gray, Color::Blue);
+        // All cells should be interior braille: ⣿ symbol with fg = fill_fn color
         for y in 0..2 {
             for x in 0..2 {
-                assert_eq!(buf.get(x, y).symbol(), " ", "cell ({x},{y}) should be fill space");
-                assert_eq!(buf.get(x, y).bg, Color::DarkGray, "cell ({x},{y}) bg should be fill_color");
+                assert_eq!(buf.get(x, y).symbol(), "⣿", "cell ({x},{y}) should be all-8-dot braille");
+                assert_eq!(buf.get(x, y).fg, Color::DarkGray, "cell ({x},{y}) fg should be fill_fn color");
             }
         }
     }
 
     #[test]
     fn paint_braille_min_signal_leaves_canvas_empty() {
-        // Signal at min → nothing should be drawn.
+        // Signal at min → only the canvas pre-fill is drawn (dark bg, no braille symbols).
         let area = Rect::new(0, 0, 2, 2);
         let mut buf = ratatui::buffer::Buffer::empty(area);
         let bars: Vec<Bar> = vec![
@@ -406,39 +431,44 @@ mod tests {
             Bar { db: -90.0, trace_color: Color::Red },
             Bar { db: -90.0, trace_color: Color::Red },
         ];
+        // fill_fn(0.0) = Rgb(50,50,50) → canvas_bg = Rgb(10,10,10)
         paint_braille(&mut buf, area, &bars, &[], &[], -200.0, -90.0, -20.0,
-            Color::DarkGray, Color::White, Color::Gray, Color::Blue);
+            |_| Color::Rgb(50, 50, 50), Color::White, Color::Gray, Color::Blue);
+        let expected_bg = Color::Rgb(10, 10, 10);  // 50/5 = 10
         for y in 0..2 {
             for x in 0..2 {
                 assert_eq!(buf.get(x, y).symbol(), " ");
-                assert_eq!(buf.get(x, y).bg, Color::Reset, "no fill expected");
+                assert_eq!(buf.get(x, y).bg, expected_bg, "canvas pre-fill expected");
             }
         }
     }
 
     #[test]
-    fn paint_braille_mid_signal_has_trace_cell() {
-        // A signal at mid-range should produce a braille trace character (not space, not empty).
+    fn paint_braille_mid_signal_has_visible_cells() {
+        // A signal at mid-range should produce visible fill or trace cells.
+        // At -55 dBFS with -90..=-20 range: frac=0.5 → 8 dots → 2 fill rows.
         let area = Rect::new(0, 0, 1, 4);
         let mut buf = ratatui::buffer::Buffer::empty(area);
-        // Signal at -55 dBFS, frac≈0.5 → dots≈8 in 16 total → floor=2 terminal rows
-        // Trace cell at cy=4-2=2 (0-indexed from top)
         let bars = vec![
             Bar { db: -55.0, trace_color: Color::Cyan },
             Bar { db: -55.0, trace_color: Color::Cyan },
         ];
+        // Use a gradient fill that returns non-black for t > 0 so we can
+        // distinguish fill cells from the canvas pre-fill (t=0 → black).
         paint_braille(&mut buf, area, &bars, &[], &[], -200.0, -90.0, -20.0,
-            Color::DarkGray, Color::White, Color::Gray, Color::Blue);
+            |t| Color::Rgb((t * 200.0) as u8, 0, 0), Color::White, Color::Gray, Color::Blue);
 
-        // Signal should be visible either as a braille trace char or as a fill cell (colored bg).
-        let visible = (0..4u16).any(|y| {
+        let canvas_bg = Color::Rgb(0, 0, 0);  // fill_fn(0.0)
+        // At least one fill cell should be brighter than the canvas background,
+        // OR a braille trace character should be present.
+        let signal_visible = (0..4u16).any(|y| {
             let c = buf.get(0, y);
-            c.symbol() != " " || c.bg != Color::Reset
+            c.symbol() != " " || c.bg != canvas_bg
         });
-        assert!(visible, "signal at mid should produce visible output");
-        // Top row (cy=0) should be empty — signal does not reach there
+        assert!(signal_visible, "mid signal should produce fill or trace cells distinct from canvas bg");
+        // Top row should not have signal content
         assert_eq!(buf.get(0, 0).symbol(), " ");
-        assert_eq!(buf.get(0, 0).bg, Color::Reset);
+        assert_eq!(buf.get(0, 0).bg, canvas_bg);
     }
 
     #[test]
