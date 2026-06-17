@@ -24,12 +24,23 @@ fn rx_pulse_glyph() -> &'static str {
     FRAMES[((ms / 220) % FRAMES.len() as u128) as usize]
 }
 
+/// A dot-leader span that fills `gap` columns: ` ······ ` (one space at each
+/// end, dim dots between), connecting a left field to a right one like an
+/// engraved instrument readout. Falls back to plain spaces when too short.
+fn leader(gap: usize, color: ratatui::style::Color) -> Span<'static> {
+    if gap >= 4 {
+        Span::styled(format!(" {} ", "·".repeat(gap - 2)), Style::default().fg(color))
+    } else {
+        Span::raw(" ".repeat(gap))
+    }
+}
+
 /// Returns (filled_str, empty_str). Each string is exactly `n` terminal columns.
-/// Filled uses █ (FULL BLOCK), empty uses ░ (LIGHT SHADE).
+/// Uses the same segmented glyphs as the signal-strip gauges: ▮ filled, ▯ empty.
 fn gain_bar(gain: u32, max_gain: u32, n: usize) -> (String, String) {
     let filled = ((gain as f32 / max_gain as f32) * n as f32).round() as usize;
     let filled = filled.min(n);
-    ("█".repeat(filled), "░".repeat(n - filled))
+    ("▮".repeat(filled), "▯".repeat(n - filled))
 }
 
 /// Returns the number of space characters needed between the fw-version field
@@ -121,7 +132,7 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
         Span::raw("  "),
         Span::styled(fw_label, Style::default().fg(theme.label)),
         Span::styled(fw_val.to_string(), Style::default().fg(fw_color)),
-        Span::raw(" ".repeat(gap)),
+        leader(gap, theme.border_dim),
         // HackRF's RF amp or RTL-SDR's tuner AGC — both 3-char labels, so the
         // "{label} " field stays 4 columns and top_band_gap remains valid.
         Span::styled(format!("{} ", state.caps.gain.boost_label()), Style::default().fg(theme.label)),
@@ -191,7 +202,7 @@ fn bottom_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) 
         Span::styled("SR ", Style::default().fg(theme.label)),
         Span::styled(sr_str, Style::default().fg(val_color)),
         Span::styled(" Msps", Style::default().fg(theme.label)),
-        Span::raw(" ".repeat(gap)),
+        leader(gap, theme.border_dim),
         Span::styled(p_label, Style::default().fg(theme.label)),
         Span::styled(p_filled, Style::default().fg(lna_color)),
         Span::styled(p_empty, Style::default().fg(dim)),
@@ -256,13 +267,13 @@ mod tests {
     fn gain_bar_zero_gain_all_empty() {
         let (filled, empty) = gain_bar(0, 40, 8);
         assert_eq!(filled, "");
-        assert_eq!(empty, "░░░░░░░░");
+        assert_eq!(empty, "▯▯▯▯▯▯▯▯");
     }
 
     #[test]
     fn gain_bar_full_gain_all_filled() {
         let (filled, empty) = gain_bar(40, 40, 8);
-        assert_eq!(filled, "████████");
+        assert_eq!(filled, "▮▮▮▮▮▮▮▮");
         assert_eq!(empty, "");
     }
 

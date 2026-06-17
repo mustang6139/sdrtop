@@ -219,6 +219,9 @@ impl Panel for SpectrumPanel {
                 let cursor_color = theme.value_hi;
                 let marker_color    = theme.status_warn;
                 let bw_border_color = theme.border_accent;
+                // Graticule: a faint reference grid (SA screen) drawn behind the
+                // trace, at the same dB ticks and frequency quarters as the axes.
+                let grid_color = theme.stale;
 
                 // Cursor canvas x-coordinate (0..n-1).
                 let cursor_x_canvas = state.spectrum.cursor_freq.and_then(|cf| {
@@ -246,6 +249,18 @@ impl Panel for SpectrumPanel {
                         .x_bounds([0.0, (n - 1.0).max(0.0)])
                         .y_bounds([y_min, y_max])
                         .paint(move |ctx| {
+                            // 0. Graticule — faint dB + frequency reference grid,
+                            //    drawn first so the trace and fill sit on top of it.
+                            //    Only the parts above the signal show through, exactly
+                            //    like a spectrum-analyser screen.
+                            for i in 0..=4 {
+                                let yv = y_min + (y_max - y_min) * (i as f64 / 4.0);
+                                ctx.draw(&CanvasLine { x1: 0.0, y1: yv, x2: n - 1.0, y2: yv, color: grid_color });
+                            }
+                            for i in 0..=4 {
+                                let xv = (n - 1.0).max(0.0) * (i as f64 / 4.0);
+                                ctx.draw(&CanvasLine { x1: xv, y1: y_min, x2: xv, y2: y_max, color: grid_color });
+                            }
                             // 1. Hold ghost — the entire frozen spectrum as a soft outline.
                             if let Some(ref held) = held_bins {
                                 for i in 1..held.len() {

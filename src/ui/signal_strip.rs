@@ -38,7 +38,7 @@ fn fmt_rbw(hz: f64) -> String {
 }
 
 /// Width (cells) of a mini-bar gauge.
-const BAR_W: usize = 5;
+const BAR_W: usize = 7;
 
 /// One metric in the strip: a label, a formatted value, and an optional gauge
 /// fill ratio (0–1). `fill = None` marks an info value with no bar (e.g. RBW).
@@ -132,8 +132,8 @@ fn bar_spans(fill: Option<f32>, bcolor: Color, dim: Color) -> Vec<Span<'static>>
         Some(f) => {
             let filled = (f.clamp(0.0, 1.0) * BAR_W as f32).round() as usize;
             vec![
-                Span::styled("▰".repeat(filled), Style::default().fg(bcolor)),
-                Span::styled("▱".repeat(BAR_W - filled), Style::default().fg(dim)),
+                Span::styled("▮".repeat(filled), Style::default().fg(bcolor)),
+                Span::styled("▯".repeat(BAR_W - filled), Style::default().fg(dim)),
             ]
         }
         None => vec![Span::styled("·".repeat(BAR_W), Style::default().fg(dim))],
@@ -183,7 +183,7 @@ impl Panel for SignalStripPanel {
         // Rich 2×4 gauge grid when there is vertical room and width; otherwise a
         // single compact line (keeps height-3 / narrow presets working). Cells
         // are spread across four even columns so the cluster fills the panel.
-        if inner.height >= 2 && inner.width >= 100 {
+        if inner.height >= 2 && inner.width >= 108 {
             let ncol: u16 = 4;
             let col_w = inner.width / ncol;
             for (ri, chunk) in cells.chunks(4).enumerate().take(inner.height as usize) {
