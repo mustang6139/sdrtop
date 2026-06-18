@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
     Frame,
@@ -230,8 +230,13 @@ impl Panel for WaterfallPanel {
                 let col    = col.min(wf_area.width.saturating_sub(lw));
                 if (col as i32) < next_free_col { continue; }
                 next_free_col = col as i32 + lw as i32 + 1;
+                // Reset bg so the band names sit on the panel's black instead of
+                // letting the colourful waterfall cells bleed through the glyphs.
                 f.render_widget(
-                    Paragraph::new(Span::styled(label, Style::default().fg(theme.label))),
+                    Paragraph::new(Span::styled(
+                        label,
+                        Style::default().fg(theme.label).bg(Color::Reset),
+                    )),
                     Rect { x: wf_area.x + col, y: wf_area.y, width: lw, height: 1 },
                 );
             }
@@ -250,8 +255,14 @@ impl Panel for WaterfallPanel {
                 if let Some((ts, _)) = buf.rows.get(data_idx) {
                     let label = format!("\u{2574}{}s", ts.elapsed().as_secs()); // ╴12s
                     let lw = label.chars().count() as u16;
+                    // Explicit Reset bg: a default Style leaves bg = None, so the
+                    // colourful waterfall cells show through and the text blends in.
+                    // Resetting to the panel's black makes it an engraved tab.
                     f.render_widget(
-                        Paragraph::new(Span::styled(label, Style::default().fg(theme.label))),
+                        Paragraph::new(Span::styled(
+                            label,
+                            Style::default().fg(theme.value_hi).bg(Color::Reset).add_modifier(Modifier::BOLD),
+                        )),
                         Rect { x: wf_area.x + wf_area.width - lw, y: wf_area.y + r as u16, width: lw, height: 1 },
                     );
                 }
