@@ -6,7 +6,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{
         canvas::{Canvas, Line as CanvasLine},
-        Paragraph,
+        Borders, Paragraph,
     },
     Frame,
 };
@@ -15,7 +15,7 @@ use crate::palette::{magnitude_to_color_themed, ColorDepth};
 use crate::state::SdrMetrics;
 use crate::ui::band_plan::BAND_PLAN;
 use crate::ui::chrome;
-use crate::ui::panel::Panel;
+use crate::ui::panel::{Bond, Panel};
 
 /// Dim an `Rgb` color's brightness by `f` (0.0–1.0). Non-Rgb colors pass through.
 fn dim(c: Color, f: f32) -> Color {
@@ -101,6 +101,42 @@ pub fn fmt_spectrum_step(hz: u64) -> String {
     else { format!("{} kHz", hz / 1_000) }
 }
 
+/// Build the frequency-scale spans for an axis/ruler `width` columns wide: a `┬`
+/// tick + MHz label at each quarter, the inter-tick gaps filled with `fill`.
+/// Reused by the spectrum's own axis (fill `' '`) and the bonded shared ruler on
+/// the waterfall's top border (fill `'─'`, so it reads as a continuous rule).
+pub fn freq_scale_spans(left_hz: f64, bw: f64, width: usize,
+                        tick_color: Color, label_color: Color, fill: char) -> Vec<Span<'static>> {
+    let labels: Vec<String> = (0..=4)
+        .map(|i| format!("{:.2}M", (left_hz + bw * i as f64 / 4.0) / 1_000_000.0))
+        .collect();
+    let lw  = labels.iter().map(|s| s.len()).max().unwrap_or(7);
+    let seg = width.saturating_sub(lw) / 4;
+    let mut spans: Vec<Span> = Vec::with_capacity(12);
+    for (i, lab) in labels.iter().enumerate() {
+        spans.push(Span::styled("\u{252C}", Style::default().fg(tick_color))); // ┬
+        if i < 4 {
+            let pad = seg.saturating_sub(1).saturating_sub(lab.len());
+            spans.push(Span::styled(lab.clone(), Style::default().fg(label_color)));
+            spans.push(Span::styled(fill.to_string().repeat(pad), Style::default().fg(tick_color)));
+        } else {
+            spans.push(Span::styled(lab.clone(), Style::default().fg(label_color)));
+        }
+    }
+    spans
+}
+
+/// Border set for the spectrum given its bond. `Bond::Below` drops the bottom
+/// border (the waterfall's top border below becomes the shared ruler); otherwise
+/// the panel is fully framed.
+fn bond_borders(bond: Bond) -> Borders {
+    if bond == Bond::Below {
+        Borders::TOP | Borders::LEFT | Borders::RIGHT
+    } else {
+        Borders::ALL
+    }
+}
+
 pub struct SpectrumPanel;
 
 impl Panel for SpectrumPanel {
@@ -120,6 +156,14 @@ impl Panel for SpectrumPanel {
     }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
+        render(f, area, state, theme, focused, Bond::None);
+    }
+}
+
+/// Free render entry point so the layout engine can bond the spectrum to the
+/// waterfall below it. `Bond::Below` drops the bottom border and the panel's own
+/// frequency-axis row — the waterfall's top border becomes the shared ruler.
+pub fn render(f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool, bond: Bond) {
         let stale = state.waterfall.last_fft.as_ref()
             .map(|fr| fr.timestamp.elapsed() > std::time::Duration::from_millis(500))
             .unwrap_or(false);
@@ -128,6 +172,8 @@ impl Panel for SpectrumPanel {
         let border_color = if focused          { theme.border_focused }
             else if stale || no_data           { theme.stale }
             else                               { theme.border_accent };
+
+        let borders = bond_borders(bond);
 
         // Nameplate: SPECTRUM with the 'E' focus key highlighted, plus live tags.
         let key_style  = Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD);
@@ -149,18 +195,20 @@ impl Panel for SpectrumPanel {
             None => {
                 f.render_widget(
                     Paragraph::new("Waiting for RX\u{2026}")
-                        .block(chrome::deck_block(border_color).title(title_line))
+                        .block(chrome::deck_block_borders(border_color, borders).title(title_line))
                         .alignment(Alignment::Center)
                         .style(Style::default().fg(theme.label)),
                     area,
                 );
-                chrome::corner_accents(f, area, border_color);
+                if bond == Bond::Below { chrome::corner_accents_top(f, area, border_color); }
+                else { chrome::corner_accents(f, area, border_color); }
             }
             Some(frame) => {
-                let outer_block = chrome::deck_block(border_color).title(title_line);
+                let outer_block = chrome::deck_block_borders(border_color, borders).title(title_line);
                 let inner = outer_block.inner(area);
                 f.render_widget(outer_block, area);
-                chrome::corner_accents(f, area, border_color);
+                if bond == Bond::Below { chrome::corner_accents_top(f, area, border_color); }
+                else { chrome::corner_accents(f, area, border_color); }
 
                 // Layout: dBFS label column (6) | canvas+freq[+indicator]
                 let cols = Layout::default()
@@ -168,38 +216,65 @@ impl Panel for SpectrumPanel {
                     .constraints([Constraint::Length(6), Constraint::Min(1)])
                     .split(inner);
 
-                let v_constraints: Vec<Constraint> = if focused {
-                    vec![Constraint::Min(4), Constraint::Length(1), Constraint::Length(1)]
-                } else {
-                    vec![Constraint::Min(4), Constraint::Length(1)]
+                // Bonded below: no own frequency-axis row (the shared ruler covers
+                // it), reclaiming that row for the plot.
+                let show_freq = bond != Bond::Below;
+                let v_constraints: Vec<Constraint> = match (focused, show_freq) {
+                    (true,  true)  => vec![Constraint::Min(4), Constraint::Length(1), Constraint::Length(1)],
+                    (true,  false) => vec![Constraint::Min(4), Constraint::Length(1)],
+                    (false, true)  => vec![Constraint::Min(4), Constraint::Length(1)],
+                    (false, false) => vec![Constraint::Min(4)],
                 };
                 let rows    = Layout::default().direction(Direction::Vertical)
                     .constraints(v_constraints.clone()).split(cols[1]);
                 let db_rows = Layout::default().direction(Direction::Vertical)
                     .constraints(v_constraints).split(cols[0]);
 
-                let canvas_area    = rows[0];
-                let freq_area      = rows[1];
-                let indicator_area = if focused { rows.get(2).copied() } else { None };
+                let canvas_area = rows[0];
+                let (freq_area, indicator_area): (Option<Rect>, Option<Rect>) = match (focused, show_freq) {
+                    (true,  true)  => (Some(rows[1]), Some(rows[2])),
+                    (true,  false) => (None,          Some(rows[1])),
+                    (false, true)  => (Some(rows[1]), None),
+                    (false, false) => (None,          None),
+                };
 
-                let n_bins = frame.bins_dbfs.len();
-                if n_bins == 0 { return; }
-                let bw = frame.sample_rate;
-                if bw <= 0.0 { return; }
-                let left_hz  = frame.center_freq_hz as f64 - bw / 2.0;
-                let right_hz = frame.center_freq_hz as f64 + bw / 2.0;
+                let full_n = frame.bins_dbfs.len();
+                if full_n == 0 { return; }
+                let full_bw = frame.sample_rate;
+                if full_bw <= 0.0 { return; }
+                let full_left = frame.center_freq_hz as f64 - full_bw / 2.0;
+
+                // Shared frequency zoom: when bonded below the waterfall, both plots
+                // narrow to the same centre slice of bins (factor `hz_zoom`), so the
+                // instrument zooms as one around the tuned frequency. Standalone the
+                // spectrum shows the full span (zoom 1).
+                let zoom = if bond == Bond::Below { (state.waterfall.hz_zoom as usize).max(1) } else { 1 };
+                let (bins, peaks, held_bins, n_bins, left_hz, bw) = if zoom > 1 {
+                    let visible_n = (full_n / zoom).max(1);
+                    let lo = (full_n / 2).saturating_sub(visible_n / 2).min(full_n - visible_n);
+                    let hi = lo + visible_n;
+                    let bin_hz = full_bw / full_n as f64;
+                    // Defensive clamp: any series whose length differs from the live
+                    // bins is windowed against its own length so slicing can't panic.
+                    let win = |v: &[f32]| {
+                        let l = lo.min(v.len());
+                        let r = hi.min(v.len());
+                        Arc::new(v[l..r].to_vec())
+                    };
+                    let held = state.spectrum.hold.as_ref().map(|h| win(h));
+                    (win(&frame.bins_dbfs), win(&frame.peak_hold), held,
+                     visible_n, full_left + lo as f64 * bin_hz, visible_n as f64 * bin_hz)
+                } else {
+                    // Arc::clone is O(1) — no data copied.
+                    (Arc::clone(&frame.bins_dbfs), Arc::clone(&frame.peak_hold),
+                     state.spectrum.hold.clone(), full_n, full_left, full_bw)
+                };
+                let right_hz = left_hz + bw;
+                let noise_floor = frame.noise_floor;
 
                 // Dynamic y-range from state (user-controlled zoom)
                 let y_min_f = state.spectrum.y_min;
                 let y_max_f = state.spectrum.y_max;
-
-                // Arc::clone is O(1) — no data copied
-                let bins  = Arc::clone(&frame.bins_dbfs);
-                let peaks = Arc::clone(&frame.peak_hold);
-                let noise_floor = frame.noise_floor;
-
-                // Hold ghost: Arc clone, O(1)
-                let held_bins = state.spectrum.hold.clone();
 
                 // Cursor power
                 let cursor_power: Option<f32> = state.spectrum.cursor_freq.and_then(|cf| {
@@ -498,26 +573,12 @@ impl Panel for SpectrumPanel {
                     }
                 }
 
-                // ── Frequency axis ────────────────────────────────────────
-                let freq_labels: Vec<String> = (0..=4)
-                    .map(|i| format!("{:.2}M", (left_hz + bw * i as f64 / 4.0) / 1_000_000.0))
-                    .collect();
-                let cw  = canvas_area.width as usize;
-                let lw  = freq_labels.iter().map(|s| s.len()).max().unwrap_or(7);
-                let seg = (cw.saturating_sub(lw)) / 4;
-                // Ticked axis: a ┬ at each quarter mark, value label trailing it,
-                // so the frequency scale reads like a ruled instrument axis.
-                let mut freq_spans: Vec<Span> = Vec::with_capacity(10);
-                for (i, lab) in freq_labels.iter().enumerate() {
-                    freq_spans.push(Span::styled("┬", Style::default().fg(border_color)));
-                    let txt = if i < 4 {
-                        format!("{:<w$}", lab, w = seg.saturating_sub(1))
-                    } else {
-                        lab.clone()
-                    };
-                    freq_spans.push(Span::styled(txt, Style::default().fg(theme.value)));
+                // ── Frequency axis (own row; omitted when bonded below) ───
+                if let Some(freq_area) = freq_area {
+                    let freq_spans = freq_scale_spans(left_hz, bw, canvas_area.width as usize,
+                                                      border_color, theme.value, ' ');
+                    f.render_widget(Paragraph::new(Line::from(freq_spans)), freq_area);
                 }
-                f.render_widget(Paragraph::new(Line::from(freq_spans)), freq_area);
 
                 // ── Tuning / cursor indicator (focus only) ────────────────
                 if let Some(ind_area) = indicator_area {
@@ -576,7 +637,6 @@ impl Panel for SpectrumPanel {
                 }
             }
         }
-    }
 }
 
 #[cfg(test)]
@@ -637,5 +697,30 @@ mod tests {
     fn detect_peaks_empty_on_pure_noise() {
         let b = vec![-90.0f32; 200];
         assert!(detect_peaks(&b, -90.0, 5, 4).is_empty());
+    }
+
+    #[test]
+    fn bond_below_drops_bottom_border() {
+        // Bonded-below: no bottom border (the waterfall's top rule takes over);
+        // every other edge stays.
+        let b = bond_borders(Bond::Below);
+        assert!(!b.contains(Borders::BOTTOM));
+        assert!(b.contains(Borders::TOP | Borders::LEFT | Borders::RIGHT));
+        // Standalone / above: fully framed.
+        assert_eq!(bond_borders(Bond::None), Borders::ALL);
+        assert_eq!(bond_borders(Bond::Above), Borders::ALL);
+    }
+
+    #[test]
+    fn freq_scale_spans_has_five_ticks_and_quarter_labels() {
+        // 100 MHz centre, 2 MHz span → labels at 99.00 … 101.00 in 0.50 steps.
+        let spans = freq_scale_spans(99_000_000.0, 2_000_000.0, 60,
+                                     Color::Reset, Color::Reset, '─');
+        let ticks = spans.iter().filter(|s| s.content == "\u{252C}").count();
+        assert_eq!(ticks, 5, "one ┬ per quarter, inclusive of both ends");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        for mhz in ["99.00M", "99.50M", "100.00M", "100.50M", "101.00M"] {
+            assert!(text.contains(mhz), "ruler should label {mhz}; got {text:?}");
+        }
     }
 }

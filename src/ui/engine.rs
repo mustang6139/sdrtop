@@ -7,7 +7,9 @@ use ratatui::{
 
 use crate::config::{LayoutConfig, Position};
 use crate::state::SdrMetrics;
+use super::panel::Bond;
 use super::registry::PanelRegistry;
+use super::{chrome, spectrum, waterfall};
 
 pub struct LayoutEngine {
     pub config: LayoutConfig,
@@ -164,7 +166,27 @@ impl LayoutEngine {
                 .split(outer[1]);
 
             render_column(f, &left_specs, columns[0], state, &self.registry, theme, focused);
-            render_column(f, &center_specs, columns[1], state, &self.registry, theme, focused);
+            // Bond: a center column that is exactly [spectrum, waterfall] renders as
+            // one instrument — the spectrum drops its bottom border + own freq axis,
+            // the waterfall's top border becomes the shared frequency ruler, and a
+            // `├`/`┤` junction overlay ties the seam into the continuous side borders.
+            let is_bond_pair = center_specs.len() == 2
+                && center_specs[0].name == "spectrum"
+                && center_specs[1].name == "waterfall";
+            if is_bond_pair {
+                let halves = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Min(0), Constraint::Min(0)])
+                    .split(columns[1]);
+                spectrum::render(f, halves[0], state, theme, focused == Some("spectrum"), Bond::Below);
+                waterfall::render(f, halves[1], state, theme, focused == Some("waterfall"), Bond::Above);
+                let seam = if focused == Some("spectrum") || focused == Some("waterfall") {
+                    theme.border_focused
+                } else { theme.border_accent };
+                chrome::junction_caps(f, halves[1], seam);
+            } else {
+                render_column(f, &center_specs, columns[1], state, &self.registry, theme, focused);
+            }
             render_column(f, &right_specs, columns[2], state, &self.registry, theme, focused);
         }
     }

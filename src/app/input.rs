@@ -153,6 +153,25 @@ fn handle_spectrum_focus(
             m.spectrum.step_hz = new_step;
             m.push_log(format!("Step → {}", fmt_spectrum_step(new_step)));
         }
+        // Shared frequency zoom — in the bonded spectrum+waterfall view both plots
+        // share one span, so `+`/`-` here drive the same `hz_zoom` the waterfall
+        // does, narrowing the whole instrument together.
+        KeyCode::Char('+') | KeyCode::Char('=') => {
+            let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
+            let new_zoom = next_wf_zoom(m.waterfall.hz_zoom);
+            m.waterfall.hz_zoom = new_zoom;
+            m.push_log(format!("Freq zoom: ×{}", new_zoom));
+        }
+        KeyCode::Char('-') => {
+            let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
+            let new_zoom = prev_wf_zoom(m.waterfall.hz_zoom);
+            m.waterfall.hz_zoom = new_zoom;
+            if new_zoom == 1 {
+                m.push_log("Freq zoom: off".to_string());
+            } else {
+                m.push_log(format!("Freq zoom: ×{}", new_zoom));
+            }
+        }
         KeyCode::Up => {
             let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
             let new_min = (m.spectrum.y_min + 10.0).min(m.spectrum.y_max - 20.0);

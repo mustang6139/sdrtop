@@ -10,8 +10,8 @@ use crate::palette::{magnitude_to_color_themed, ColorDepth};
 use crate::state::SdrMetrics;
 use crate::ui::band_plan::BAND_PLAN;
 use crate::ui::chrome;
-use crate::ui::panel::Panel;
-use crate::ui::spectrum::fmt_spectrum_step;
+use crate::ui::panel::{Bond, Panel};
+use crate::ui::spectrum::{fmt_spectrum_step, freq_scale_spans};
 
 // ── Waterfall row-stride steps ────────────────────────────────────────────────
 
@@ -62,10 +62,24 @@ impl Panel for WaterfallPanel {
     }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
+        render(f, area, state, theme, focused, Bond::None);
+    }
+}
+
+/// Free render entry point so the layout engine can bond the waterfall to the
+/// spectrum above it. `Bond::Above` forces `zoom = 1` (the shared ruler shows the
+/// spectrum's full span), drops the nameplate (its identity + live tags move to
+/// the ruler's end-cap tabs), and overlays the shared frequency ruler on the top
+/// border so the two panels read as one instrument.
+pub fn render(f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool, bond: Bond) {
+        let bonded  = bond == Bond::Above;
         let buf = &state.waterfall.buffer;
         let db_min  = state.waterfall.db_min;
         let scroll  = state.waterfall.scroll_offset;
         let stride  = buf.row_stride;
+        // `hz_zoom` is the shared frequency zoom: in the bonded view the spectrum
+        // above narrows to the same centre slice, so `+`/`-` zoom both plots at
+        // once around the tuned frequency.
         let zoom    = state.waterfall.hz_zoom;
 
         let no_data = state.waterfall.last_fft.is_none();
@@ -77,6 +91,9 @@ impl Panel for WaterfallPanel {
             else { theme.border_accent };
 
         // Nameplate: WATERFALL with the second 'L' focus key highlighted, plus tags.
+        // In bonded mode the nameplate is suppressed; the live tags move to the
+        // shared ruler's tabs (left `[L]`, right status), so the top border stays
+        // a clean frequency rule.
         let key_style  = Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD);
         let name_style = Style::default().fg(theme.label).add_modifier(Modifier::BOLD);
         let mut title_spans = chrome::nameplate(vec![
@@ -111,7 +128,7 @@ impl Panel for WaterfallPanel {
                 Style::default().fg(theme.value_hi),
             ));
         }
-        let title_line = Line::from(title_spans);
+        let title_line = if bonded { Line::from("") } else { Line::from(title_spans) };
 
         if buf.rows.is_empty() {
             f.render_widget(
@@ -159,6 +176,54 @@ impl Panel for WaterfallPanel {
                 (fr.center_freq_hz as f64 - visible_bw / 2.0, visible_bw)
             })
             .unwrap_or((0.0, 1.0));
+
+        // ── Bonded shared ruler ────────────────────────────────────────────
+        // The top border of the waterfall doubles as the spectrum+waterfall
+        // shared frequency rule: a `┬`-ticked MHz scale aligned to the plot
+        // (`wf_area`), with `─` fill so it reads as a continuous engraved rule.
+        // The `WATERFALL` nameplate rides the rule's left cap (the `L` focus key
+        // highlighted), and live tags (`⏸ ×N ↑N`) ride a right cap on the bottom
+        // border — so the panel keeps its identity without a second frame.
+        if bonded {
+            let ruler = freq_scale_spans(left_hz, bw, wf_area.width as usize,
+                                         border_color, theme.value, '\u{2500}'); // ─
+            f.render_widget(
+                Paragraph::new(Line::from(ruler)),
+                Rect { x: wf_area.x, y: area.y, width: wf_area.width, height: 1 },
+            );
+            // Left cap: `╴WATERFALL╶` nameplate (the second-`L` focus key lit),
+            // overlaid on the rule's left so the panel name stays where the eye
+            // expects it; the rule's ticks stay aligned to the plot beneath.
+            let name = chrome::nameplate(vec![
+                Span::styled("WATERFA", name_style),
+                Span::styled("L", key_style),
+                Span::styled("L", name_style),
+            ], border_color);
+            let name_w: u16 = name.iter().map(|s| s.width() as u16).sum::<u16>()
+                .min(area.width.saturating_sub(2));
+            f.render_widget(
+                Paragraph::new(Line::from(name)),
+                Rect { x: area.x + 1, y: area.y, width: name_w, height: 1 },
+            );
+            // Right cap on the BOTTOM border: live status the nameplate used
+            // to carry (paused / row-stride / scroll-back), right-aligned.
+            let mut tags: Vec<Span> = Vec::new();
+            if buf.paused { tags.push(Span::styled("\u{23F8} ", Style::default().fg(theme.status_warn))); }
+            else if stale { tags.push(Span::styled("STALE ", Style::default().fg(theme.stale))); }
+            if stride > 1 { tags.push(Span::styled(format!("\u{00D7}{} ", stride), Style::default().fg(theme.label))); }
+            if display_scroll > 0 { tags.push(Span::styled(format!("\u{2191}{} ", display_scroll), Style::default().fg(theme.value_hi))); }
+            if !tags.is_empty() && area.height >= 2 {
+                let mut status = vec![Span::styled("\u{2574}", Style::default().fg(border_color))];
+                status.extend(tags);
+                status.push(Span::styled("\u{2576}", Style::default().fg(border_color)));
+                let w: u16 = status.iter().map(|s| s.width() as u16).sum();
+                let x = (area.x + area.width).saturating_sub(2 + w);
+                f.render_widget(
+                    Paragraph::new(Line::from(status)),
+                    Rect { x, y: area.y + area.height - 1, width: w, height: 1 },
+                );
+            }
+        }
 
         // Cursor column in display space
         let cursor_col: Option<usize> = state.waterfall.cursor_freq.and_then(|cf| {
@@ -213,7 +278,9 @@ impl Panel for WaterfallPanel {
         f.render_widget(Paragraph::new(lines), wf_area);
 
         // ── Band plan overlay (dim labels on the top row of the waterfall) ─
-        if wf_area.height >= 2 && wf_area.width > 4 {
+        // Skipped when bonded — the spectrum above already carries the band plan,
+        // so showing it twice would be redundant.
+        if !bonded && wf_area.height >= 2 && wf_area.width > 4 {
             let cw = wf_area.width as f64;
             let right_hz = left_hz + bw;
             let mut next_free_col: i32 = -1;
@@ -333,5 +400,4 @@ impl Panel for WaterfallPanel {
             ]);
             f.render_widget(Paragraph::new(line), ind_area);
         }
-    }
 }

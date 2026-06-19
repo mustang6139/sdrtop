@@ -17,10 +17,43 @@ use ratatui::{
 
 /// A panel frame in the schematic deck language: square corners, single rule.
 pub fn deck_block<'a>(border_color: Color) -> Block<'a> {
+    deck_block_borders(border_color, Borders::ALL)
+}
+
+/// Like [`deck_block`] but with an explicit border set — used when two panels
+/// bond into one instrument and the facing edge is dropped (e.g. the spectrum
+/// renders `TOP | LEFT | RIGHT`, letting the waterfall's top border below it act
+/// as the shared frequency ruler).
+pub fn deck_block_borders<'a>(border_color: Color, borders: Borders) -> Block<'a> {
     Block::default()
-        .borders(Borders::ALL)
+        .borders(borders)
         .border_type(BorderType::Plain)
         .border_style(Style::default().fg(border_color))
+}
+
+/// Overlay only the top reinforced corners (`┏┓`) — for a panel bonded below a
+/// neighbour, which has no bottom border to anchor `┗┛`.
+pub fn corner_accents_top(f: &mut Frame, area: Rect, color: Color) {
+    if area.width < 2 || area.height < 1 { return; }
+    let style = Style::default().fg(color);
+    let r = area.x + area.width - 1;
+    f.render_widget(Paragraph::new(Span::styled("\u{250F}", style)),
+                    Rect { x: area.x, y: area.y, width: 1, height: 1 }); // ┏
+    f.render_widget(Paragraph::new(Span::styled("\u{2513}", style)),
+                    Rect { x: r, y: area.y, width: 1, height: 1 });      // ┓
+}
+
+/// Overlay `├` / `┤` T-junctions on the top corners of `area`, in `color`. Used
+/// at a bonded boundary so the shared-ruler row ties into the continuous side
+/// borders of the panel above instead of reading as a separate box's `┌`/`┐`.
+pub fn junction_caps(f: &mut Frame, area: Rect, color: Color) {
+    if area.width < 2 { return; }
+    let style = Style::default().fg(color);
+    let r = area.x + area.width - 1;
+    f.render_widget(Paragraph::new(Span::styled("\u{251C}", style)),
+                    Rect { x: area.x, y: area.y, width: 1, height: 1 }); // ├
+    f.render_widget(Paragraph::new(Span::styled("\u{2524}", style)),
+                    Rect { x: r, y: area.y, width: 1, height: 1 });      // ┤
 }
 
 /// Overlay reinforced "bracket" corners on an already-rendered panel frame, in

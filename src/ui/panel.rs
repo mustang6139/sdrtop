@@ -1,6 +1,14 @@
 use ratatui::{layout::Rect, Frame};
 use crate::state::SdrMetrics;
 
+/// How a panel is fused to a vertically-adjacent neighbour. When the spectrum
+/// sits directly above the waterfall they render as one bonded instrument with a
+/// single shared frequency ruler: the spectrum drops its bottom border + its own
+/// frequency axis (`Below`), and the waterfall's top border becomes that shared
+/// ruler (`Above`). `None` is the normal, standalone framing.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Bond { None, Below, Above }
+
 pub trait Panel: Send + Sync {
     fn name(&self) -> &'static str;
     #[allow(dead_code)]
