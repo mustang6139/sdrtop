@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::state::SdrMetrics;
+use crate::ui::band_plan::band_at;
 use crate::ui::chrome;
 use super::panel::Panel;
 
@@ -192,22 +193,150 @@ fn top_band_line(state: &SdrMetrics, theme: &crate::Theme, inner_width: u16) -> 
     ])
 }
 
-/// Builds the ├──── FREQUENCY ────┤ line.
-/// `outer_width` is the FULL panel width (including border chars), not the inner width.
-/// The returned Line must be rendered at the outer Rect so ├/┤ overwrite the │ border chars.
-fn separator_line(theme: &crate::Theme, outer_width: u16) -> Line<'static> {
-    let label = " FREQUENCY ";
-    let label_len = label.chars().count();
-    let fill = (outer_width as usize).saturating_sub(2 + label_len);  // 2 for ├ and ┤
-    let left_fill = fill / 2;
-    let right_fill = fill - left_fill;
+/// Compact frequency label for the tuning-range end-caps: "1M", "145M", "1.8G",
+/// "6G", "24M", "300k". Whole GHz values drop the decimal ("6G", not "6.0G").
+fn fmt_freq_compact(hz: u64) -> String {
+    if hz >= 1_000_000_000 {
+        let g = hz as f64 / 1e9;
+        if (g - g.round()).abs() < 0.05 { format!("{:.0}G", g) } else { format!("{:.1}G", g) }
+    } else if hz >= 1_000_000 {
+        format!("{:.0}M", hz as f64 / 1e6)
+    } else if hz >= 1_000 {
+        format!("{}k", hz / 1_000)
+    } else {
+        format!("{hz}")
+    }
+}
+
+/// Logarithmic position (0..1) of `freq` within the tunable range `[min,max]`.
+/// Log, because a receiver's span is enormous (MHz…GHz) — a linear bar would
+/// Perceptual exponent for the tuning-dial position. A pure-log axis pushes the
+/// low end too far right (1 MHz…120 MHz already eats ~55 % of the bar, then the
+/// whole GHz range crawls in the remaining 45 %). A pure-linear axis does the
+/// opposite — it crushes everything below ~1 GHz into the first columns. `0.4`
+/// is the middle ground: it spreads VHF/UHF readably while still moving the
+/// needle at a steady pace up into the GHz range.
+const DIAL_GAMMA: f64 = 0.4;
+
+/// Position (0..1) of `freq` within the tunable range `[min,max]` on a `γ`-power
+/// axis (see [`DIAL_GAMMA`]). Clamped to the range.
+fn range_frac(freq: u64, min: u64, max: u64) -> f64 {
+    let lo = (min.max(1) as f64).powf(DIAL_GAMMA);
+    let hi = (max.max(1) as f64).powf(DIAL_GAMMA);
+    if hi <= lo { return 0.0; }
+    let f = (freq as f64).clamp(min as f64, max as f64).max(1.0).powf(DIAL_GAMMA);
+    ((f - lo) / (hi - lo)).clamp(0.0, 1.0)
+}
+
+/// A plain ruled `├───────┤` rule — fallback for terminals too narrow to fit the
+/// live tuning strip.
+fn plain_separator(theme: &crate::Theme, outer_width: u16) -> Line<'static> {
+    let fill = (outer_width as usize).saturating_sub(2);
     Line::from(vec![
         Span::styled("├", Style::default().fg(theme.border_dim)),
-        Span::styled("─".repeat(left_fill), Style::default().fg(theme.border_default)),
-        Span::styled(label, Style::default().fg(theme.border_dim)),
-        Span::styled("─".repeat(right_fill), Style::default().fg(theme.border_default)),
+        Span::styled("─".repeat(fill), Style::default().fg(theme.border_default)),
         Span::styled("┤", Style::default().fg(theme.border_dim)),
     ])
+}
+
+/// The header's central rule, repurposed from a static "FREQUENCY" label into a
+/// live tuning dial: a `γ`-power position bar across the device's whole tunable
+/// range, end-capped by the range limits, with a lit `━` rail behind a `◆` needle
+/// at the current frequency — and the **band name riding the needle** (e.g.
+/// `◆╴2m╶`), so the band you're in sits exactly where the eye lands. `outer_width`
+/// is the FULL panel width; rendered at the outer Rect so `├`/`┤` overwrite `│`.
+fn band_strip_line(state: &SdrMetrics, theme: &crate::Theme, outer_width: u16) -> Line<'static> {
+    compose_band_strip(state.radio.frequency, state.caps.freq_min_hz, state.caps.freq_max_hz,
+                       theme, outer_width)
+}
+
+/// Pure core of [`band_strip_line`] — takes the tuned frequency and tunable range
+/// directly so it can be unit-tested without a full `SdrMetrics`.
+fn compose_band_strip(freq: u64, fmin: u64, fmax: u64,
+                      theme: &crate::Theme, outer_width: u16) -> Line<'static> {
+    let frac   = range_frac(freq, fmin, fmax);
+    let lo_lbl = fmt_freq_compact(fmin);
+    let hi_lbl = fmt_freq_compact(fmax);
+
+    // Fixed chrome around the track:  ├ ─ LO <track> HI ─ ┤
+    let left_w  = 1 + 1 + 1 + lo_lbl.chars().count() + 1;
+    let right_w = 1 + hi_lbl.chars().count() + 1 + 1;
+    let track_w = (outer_width as usize).saturating_sub(left_w + right_w);
+
+    if track_w < 8 {
+        return plain_separator(theme, outer_width);
+    }
+
+    let marker_col = ((frac * (track_w - 1) as f64).round() as usize).min(track_w - 1);
+
+    let dim   = theme.border_dim;
+    let track = theme.border_default;
+
+    let mut spans = vec![
+        Span::styled("├", Style::default().fg(dim)),
+        Span::styled("─", Style::default().fg(track)),
+        Span::raw(" "),
+        Span::styled(lo_lbl, Style::default().fg(theme.label)),
+        Span::raw(" "),
+    ];
+    spans.extend(rail_spans(track_w, marker_col, band_at(freq), theme));
+    spans.extend([
+        Span::raw(" "),
+        Span::styled(hi_lbl, Style::default().fg(theme.label)),
+        Span::raw(" "),
+        Span::styled("─", Style::default().fg(track)),
+        Span::styled("┤", Style::default().fg(dim)),
+    ]);
+    Line::from(spans)
+}
+
+/// The lit-rail dial itself, exactly `track_w` columns: a bright heavy `━` rule up
+/// to the `◆` needle, then a faint dashed `┈` rule, with the band-name callout
+/// `╴NAME╶` placed against the needle (to its right if it fits, else its left).
+/// Position is double-encoded — brightness *and* line weight — so it reads at a
+/// glance, and the band label sits right at the needle.
+fn rail_spans(track_w: usize, marker_col: usize, band: Option<&'static str>,
+              theme: &crate::Theme) -> Vec<Span<'static>> {
+    let heavy = Style::default().fg(theme.border_accent);
+    let faint = Style::default().fg(theme.border_dim);
+    let mark  = Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD);
+    let cap   = Style::default().fg(theme.border_accent);
+    let name  = Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD);
+
+    let callout: Vec<Span<'static>> = match band {
+        Some(b) => vec![
+            Span::styled("╴", cap),
+            Span::styled(b, name),
+            Span::styled("╶", cap),
+        ],
+        None => Vec::new(),
+    };
+    let cw: usize = callout.iter().map(|s| s.width()).sum();
+
+    let heavy_run = |n: usize| Span::styled("━".repeat(n), heavy);
+    let faint_run = |n: usize| Span::styled("┈".repeat(n), faint);
+    let needle    = || Span::styled("◆", mark);
+
+    let mut spans = Vec::with_capacity(6);
+    if cw > 0 && marker_col + 1 + cw <= track_w {
+        // Callout to the RIGHT of the needle.
+        spans.push(heavy_run(marker_col));
+        spans.push(needle());
+        spans.extend(callout);
+        spans.push(faint_run(track_w - marker_col - 1 - cw));
+    } else if cw > 0 && marker_col >= cw {
+        // No room on the right — tuck the callout to the LEFT of the needle.
+        spans.push(heavy_run(marker_col - cw));
+        spans.extend(callout);
+        spans.push(needle());
+        spans.push(faint_run(track_w - marker_col - 1));
+    } else {
+        // Between bands (or no room): just the lit rail + needle.
+        spans.push(heavy_run(marker_col));
+        spans.push(needle());
+        spans.push(faint_run(track_w - marker_col - 1));
+    }
+    spans
 }
 
 /// Frequency · sample-rate on the left, gain bars right-aligned. Left block
@@ -308,7 +437,7 @@ impl Panel for HeaderPanel {
         let bot_area = Rect { x: inner.x, y: inner.y + 2, width: inner.width, height: 1 };
 
         f.render_widget(Paragraph::new(top_band_line(state, theme, inner.width)), top_area);
-        f.render_widget(Paragraph::new(separator_line(theme, area.width)), sep_area);
+        f.render_widget(Paragraph::new(band_strip_line(state, theme, area.width)), sep_area);
         f.render_widget(Paragraph::new(bottom_band_line(state, theme, inner.width)), bot_area);
     }
 }
@@ -407,5 +536,73 @@ mod tests {
     fn top_band_gap_observer_state() {
         // badge " ◈ OBSERVER " (len=12), fw "—" (len=1)
         assert_eq!(top_band_gap(10, 12, 1, 3, 9, 78), 11);
+    }
+
+    #[test]
+    fn fmt_freq_compact_units() {
+        assert_eq!(fmt_freq_compact(1_000_000),     "1M");
+        assert_eq!(fmt_freq_compact(145_000_000),   "145M");
+        assert_eq!(fmt_freq_compact(24_000_000),    "24M");
+        assert_eq!(fmt_freq_compact(6_000_000_000), "6G");   // whole GHz drops decimal
+        assert_eq!(fmt_freq_compact(1_766_000_000), "1.8G");
+        assert_eq!(fmt_freq_compact(300_000),       "300k");
+    }
+
+    #[test]
+    fn range_frac_endpoints_monotonic_and_clamp() {
+        let (lo, hi) = (1_000_000u64, 6_000_000_000u64);
+        assert!((range_frac(lo, lo, hi) - 0.0).abs() < 1e-9, "min → 0");
+        assert!((range_frac(hi, lo, hi) - 1.0).abs() < 1e-9, "max → 1");
+        // The whole point of the γ-power axis: the low end no longer eats half the
+        // bar. 120 MHz sat at ~0.55 on a log axis; here it must be well under a
+        // quarter, and the GHz range gets the room instead.
+        assert!(range_frac(120_000_000, lo, hi) < 0.25,
+                "120 MHz should sit in the lower quarter, got {}",
+                range_frac(120_000_000, lo, hi));
+        assert!(range_frac(1_000_000_000, lo, hi) > 0.40,
+                "1 GHz should be past the low band, got {}",
+                range_frac(1_000_000_000, lo, hi));
+        // Strictly increasing with frequency.
+        assert!(range_frac(100_000_000, lo, hi) < range_frac(1_000_000_000, lo, hi));
+        assert!(range_frac(1_000_000_000, lo, hi) < range_frac(3_000_000_000, lo, hi));
+        // out-of-range clamps to the ends
+        assert_eq!(range_frac(500_000, lo, hi), 0.0);
+        assert_eq!(range_frac(9_000_000_000, lo, hi), 1.0);
+    }
+
+    #[test]
+    fn rail_spans_always_track_width() {
+        // The rail must be exactly track_w columns for every marker position and
+        // both with/without a band callout, so the outer width math holds.
+        let t = Theme::sdr();
+        for track_w in [8usize, 20, 40, 67] {
+            for marker in [0usize, 1, track_w / 2, track_w - 2, track_w - 1] {
+                for band in [None, Some("2m"), Some("ISM433")] {
+                    let w: usize = rail_spans(track_w, marker, band, &t)
+                        .iter().map(|s| s.width()).sum();
+                    assert_eq!(w, track_w,
+                        "track_w={track_w} marker={marker} band={band:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn band_strip_total_width_matches_outer() {
+        // The composed strip must be exactly `outer_width` columns so the ├/┤ caps
+        // land on the border and nothing is truncated or padded. Exercised across
+        // an in-band frequency (named tab) and an out-of-band one (% tab).
+        let t = Theme::sdr();
+        for outer in [60u16, 78, 120, 200] {
+            for (lbl, line) in [
+                ("named", compose_band_strip(145_500_000, 1_000_000, 6_000_000_000, &t, outer)),
+                ("percent", compose_band_strip(200_000_000, 1_000_000, 6_000_000_000, &t, outer)),
+            ] {
+                let w: usize = line.spans.iter().map(|s| s.width()).sum();
+                assert_eq!(w, outer as usize, "{lbl} strip width at outer={outer}");
+                assert_eq!(line.spans.first().unwrap().content.as_ref(), "├");
+                assert_eq!(line.spans.last().unwrap().content.as_ref(), "┤");
+            }
+        }
     }
 }
