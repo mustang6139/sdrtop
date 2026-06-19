@@ -258,9 +258,9 @@ fn compose_band_strip(freq: u64, fmin: u64, fmax: u64,
     let lo_lbl = fmt_freq_compact(fmin);
     let hi_lbl = fmt_freq_compact(fmax);
 
-    // Fixed chrome around the track:  ├ ─ LO <track> HI ─ ┤
+    // Fixed chrome around the track:  ├ ─ ␠ LO ␠ <track> ␠ HI ␠ ─ ┤
     let left_w  = 1 + 1 + 1 + lo_lbl.chars().count() + 1;
-    let right_w = 1 + hi_lbl.chars().count() + 1 + 1;
+    let right_w = 1 + hi_lbl.chars().count() + 1 + 1 + 1;
     let track_w = (outer_width as usize).saturating_sub(left_w + right_w);
 
     if track_w < 8 {
