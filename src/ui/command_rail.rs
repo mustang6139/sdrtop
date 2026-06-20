@@ -149,19 +149,26 @@ fn clip_alert(last_clip_at: Option<u64>, now: u64) -> Option<(u64, bool)> {
     (since <= CLIP_MEMORY_SECS).then_some((since, since <= CLIP_FRESH_SECS))
 }
 
-/// The `[ HUNT ][ MONITOR ][ BENCH ]` mode strip — the active mode lit as a
-/// chip (`value_hi` bg), the others dim. The mode follows actions automatically
-/// and `Tab` in rail-focus pins it.
-fn mode_tabs_line(active: RailMode, theme: &crate::Theme) -> Line<'static> {
+/// Columns the full `HUNT·MONITOR·BENCH` strip needs: a leading space, then each
+/// mode as ` LABEL ` (label+2) plus a one-column gap. Pure, for the width check.
+fn mode_tabs_full_w() -> usize {
+    1 + RailMode::ALL.iter().map(|m| m.label().len() + 3).sum::<usize>()
+}
+
+/// The `HUNT·MONITOR·BENCH` mode strip — the active mode lit as a chip
+/// (`value_hi` bg), the others dim. Falls back to 3-letter codes when the rail is
+/// too narrow for the full labels, so the strip never clips mid-word.
+fn mode_tabs_line(active: RailMode, iw: usize, theme: &crate::Theme) -> Line<'static> {
+    let compact = mode_tabs_full_w() > iw;
     let mut spans = vec![Span::raw(" ")];
     for m in RailMode::ALL {
-        let chip = format!(" {} ", m.label());
+        let label = if compact { &m.label()[..3] } else { m.label() };
         let style = if m == active {
             Style::default().fg(Color::Rgb(4, 6, 15)).bg(theme.value_hi).add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme.label)
         };
-        spans.push(Span::styled(chip, style));
+        spans.push(Span::styled(format!(" {label} "), style));
         spans.push(Span::raw(" "));
     }
     Line::from(spans)
@@ -311,9 +318,10 @@ fn freq_hero_lines(freq: u64, step: u64, observer: bool, inner_w: usize,
                    theme: &crate::Theme) -> Vec<Line<'static>> {
     let s = vfo_string(freq);
 
-    // Narrow fallback: the existing single-line segmented VFO (+" MHz"). The +6
-    // budget leaves room for the leading space and the " MHz" suffix.
-    if bigdigits::big_width(&s) + 6 > inner_w {
+    // Narrow fallback: the existing single-line segmented VFO (+" MHz"). The
+    // budget covers the leading space (1) + the gap (1) + the "MHz" suffix (3),
+    // so the big readout shows whenever its widest (middle) row actually fits.
+    if bigdigits::big_width(&s) + 5 > inner_w {
         let col = if observer { theme.label } else { theme.value_hi };
         let mut spans = vec![Span::raw(" ")];
         spans.extend(vfo_spans(freq, step, col, theme.label, theme.value_hi));
@@ -346,21 +354,30 @@ fn freq_hero_lines(freq: u64, step: u64, observer: bool, inner_w: usize,
 
 /// `[FM]  SR 2.0M · RBW 1.5 kHz` — the band chip plus sample-rate / resolution
 /// context, sitting just under the frequency hero.
-fn band_sr_line(state: &SdrMetrics, theme: &crate::Theme) -> Line<'static> {
+fn band_sr_line(state: &SdrMetrics, iw: usize, theme: &crate::Theme) -> Line<'static> {
     let mut spans = vec![Span::raw(" ")];
+    let mut used = 1;
     if let Some(b) = band_at(state.radio.frequency) {
-        spans.push(Span::styled(format!(" {b} "), Style::default()
+        let chip = format!(" {b} ");
+        used += chip.chars().count() + 2;
+        spans.push(Span::styled(chip, Style::default()
             .fg(Color::Rgb(4, 6, 15)).bg(theme.value_hi).add_modifier(Modifier::BOLD)));
         spans.push(Span::raw("  "));
     }
-    let sr = state.radio.config_sample_rate / 1_000_000.0;
-    spans.push(Span::styled(format!("SR {sr:.1}M"), Style::default().fg(theme.label)));
-    spans.push(Span::styled(" · ", Style::default().fg(theme.border_dim)));
+    let sr = format!("SR {:.1}M", state.radio.config_sample_rate / 1_000_000.0);
+    used += sr.chars().count();
+    spans.push(Span::styled(sr, Style::default().fg(theme.label)));
+    // RBW is the first thing to go on a narrow rail — drop it (and its separator)
+    // rather than let it clip mid-word at the panel border.
     let rbw = match state.waterfall.last_fft.as_ref().filter(|fr| fr.enbw_hz > 0.0) {
         Some(fr) => fmt_rbw(fr.enbw_hz),
         None     => "—".to_string(),
     };
-    spans.push(Span::styled(format!("RBW {rbw}"), Style::default().fg(theme.label)));
+    let rbw_str = format!(" · RBW {rbw}");
+    if used + rbw_str.chars().count() <= iw {
+        spans.push(Span::styled(" · ", Style::default().fg(theme.border_dim)));
+        spans.push(Span::styled(format!("RBW {rbw}"), Style::default().fg(theme.label)));
+    }
     Line::from(spans)
 }
 
@@ -396,7 +413,8 @@ impl Panel for CommandRailPanel {
         let observer = state.observer.active;
         let active = state.radio.hw_streaming && !observer;
 
-        let lbl   = |s: &str| Span::styled(format!("{s:<5}"), Style::default().fg(theme.label));
+        // Width 6 so the 5-char "TOTAL" still keeps a gap before its value.
+        let lbl   = |s: &str| Span::styled(format!("{s:<6}"), Style::default().fg(theme.label));
         // Dim `╴SECTION╶` divider, matching the deck nameplate language.
         let section = |name: &str| Line::from(chrome::nameplate(
             vec![chrome::label(name, theme.label)], theme.border_dim));
@@ -406,14 +424,14 @@ impl Panel for CommandRailPanel {
         // --- FREQ HERO ---------------------------------------------------------
         lines.extend(freq_hero_lines(state.radio.frequency, state.spectrum.step_hz,
                                      observer, iw, theme));
-        lines.push(band_sr_line(state, theme));
+        lines.push(band_sr_line(state, iw, theme));
         lines.push(Line::raw(""));
 
         // --- MODE STRIP + lead card -------------------------------------------
         // The mode auto-follows actions (tune→Hunt, gain→Bench) and decays to
         // Monitor; the lead card below adapts to it. Everything under it is fixed.
         let mode = state.ui.effective_rail_mode();
-        lines.push(mode_tabs_line(mode, theme));
+        lines.push(mode_tabs_line(mode, iw, theme));
         lines.extend(mode_card_lines(mode, state, stale, theme));
         lines.push(Line::raw(""));
 
@@ -538,6 +556,13 @@ impl Panel for CommandRailPanel {
         } else {
             (inner, None)
         };
+        // Self-adjusting density: on a short rail where the airy layout would
+        // overflow (and clip a whole section), drop the blank section spacers so
+        // every section still shows. Tall rails keep the breathing room. The
+        // `╴SECTION╶` nameplates carry the separation either way.
+        if lines.len() > stack_area.height as usize {
+            lines.retain(|l| l.spans.iter().any(|s| !s.content.trim().is_empty()));
+        }
         f.render_widget(Paragraph::new(lines), stack_area);
 
         if let Some(foot) = foot_area {
@@ -649,6 +674,16 @@ mod tests {
         assert_eq!(clip_alert(Some(100), 140), None);            // older than memory
         // Clock skew (clip "in the future") must not panic or misread.
         assert_eq!(clip_alert(Some(100), 90), Some((0, true)));
+    }
+
+    #[test]
+    fn mode_tabs_full_width_is_the_label_budget() {
+        // " HUNT " + gap + " MONITOR " + gap + " BENCH " + gap, plus leading space.
+        // (4+3) + (7+3) + (5+3) + 1 = 26.
+        assert_eq!(mode_tabs_full_w(), 26);
+        // Compact kicks in below that — the strip then uses 3-letter codes.
+        assert!(mode_tabs_full_w() > 20, "narrow rail must compact");
+        assert!(mode_tabs_full_w() <= 28, "wide rail shows full labels");
     }
 
     #[test]
