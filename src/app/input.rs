@@ -94,8 +94,9 @@ fn handle_normal(
         Some("iq_diagnostics")  => handle_iq_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         Some("hardware_health") => handle_health_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         Some("timing_panel")    => handle_timing_focus(key, state, device, engine, show_help, show_footer, focus_keys),
-        Some("sweep_panel")     => handle_sweep_focus(key, state, device, engine, show_help, show_footer, focus_keys),
-        Some("command_rail")    => handle_command_rail_focus(key, state, device, engine, show_help, show_footer, focus_keys),
+        Some("sweep_panel")      => handle_sweep_focus(key, state, device, engine, show_help, show_footer, focus_keys),
+        Some("signal_metrics")   => handle_signal_metrics_focus(key, state, device, engine, show_help, show_footer, focus_keys),
+        Some("command_rail")     => handle_command_rail_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         Some("lab_banner")      => handle_lab_banner_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         _                       => handle_global(key, state, device, engine, show_help, show_footer, focus_keys),
     }
@@ -452,6 +453,40 @@ fn handle_iq_focus(
     handle_global(key, state, device, engine, show_help, show_footer, focus_keys)
 }
 
+/// `signal_metrics` focus (`[N]`): `[C]` logs a one-line snapshot of the current
+/// signal quality metrics (SNR, channel power, occupied BW, noise floor).
+fn handle_signal_metrics_focus(
+    key: KeyEvent,
+    state: &Arc<Mutex<SdrMetrics>>,
+    device: Option<&Arc<dyn hardware::SdrDevice>>,
+    engine: &mut ui::LayoutEngine,
+    show_help: &mut bool,
+    show_footer: &mut bool,
+    focus_keys: &HashMap<char, &'static str>,
+) -> KeyAction {
+    if let KeyCode::Char('c') = key.code {
+        let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
+        let snr = m.signal.peak_to_nf_db;
+        let pwr = m.signal.channel_power_dbfs;
+        let obw = m.signal.occupied_bw_hz;
+        let nf  = m.waterfall.last_fft.as_ref().map(|fr| fr.noise_floor);
+        let obw_str = if obw >= 1_000_000 {
+            format!("{:.3} MHz", obw as f64 / 1_000_000.0)
+        } else if obw >= 1_000 {
+            format!("{:.1} kHz", obw as f64 / 1_000.0)
+        } else {
+            format!("{} Hz", obw)
+        };
+        let nf_str = nf.map(|n| format!("{:.1} dBFS", n)).unwrap_or_else(|| "\u{2014}".into());
+        m.push_log(format!(
+            "Signal snapshot — SNR: {:.1} dB · Pwr: {:.1} dBFS · OBW: {} · NF: {}",
+            snr, pwr, obw_str, nf_str
+        ));
+        return KeyAction::Continue;
+    }
+    handle_global(key, state, device, engine, show_help, show_footer, focus_keys)
+}
+
 /// `hardware_health` focus (`[V]`): `[R]` resets the session drop counter, `[C]`
 /// clears the trend sparkline histories.
 fn handle_health_focus(
@@ -553,6 +588,36 @@ fn handle_sweep_focus(
             m.sweep.config.dwell_ms = m.sweep.config.dwell_ms.saturating_sub(50).max(50);
             let d = m.sweep.config.dwell_ms;
             m.push_log(format!("Sweep dwell → {} ms", d));
+        }
+        KeyCode::Char('c') => {
+            let m = state.lock().unwrap_or_else(|e| e.into_inner());
+            let msg = if let Some(frame) = m.sweep.current_frame.as_ref() {
+                let curve = if m.sweep.show_peak { &frame.peak_dbfs } else { &frame.mean_dbfs };
+                let cursor_str = if let Some(frac) = m.sweep.cursor_frac {
+                    let hz = frame.freq_at_fraction(frac);
+                    // Find the bin in freq_hz closest to the cursor frequency.
+                    let level = frame.freq_hz.iter().enumerate()
+                        .min_by_key(|(_, &f)| f.abs_diff(hz))
+                        .and_then(|(i, _)| curve.get(i).copied().filter(|v| v.is_finite()));
+                    let db_str = level.map(|v| format!("{:.1} dBFS", v)).unwrap_or_else(|| "\u{2014}".into());
+                    format!("cursor {:.3} MHz {} · ", hz as f64 / 1e6, db_str)
+                } else {
+                    String::new()
+                };
+                let top = frame.top_peaks(1, 500_000).into_iter().next()
+                    .map(|(f, v)| format!("top {:.3} MHz {:.1} dBFS", f as f64 / 1e6, v))
+                    .unwrap_or_else(|| "no data".into());
+                format!(
+                    "Sweep snapshot — {}{} · {:.1}–{:.1} MHz ({:.1}s/cycle)",
+                    cursor_str, top,
+                    frame.start_hz as f64 / 1e6, frame.stop_hz as f64 / 1e6,
+                    frame.cycle_duration_ms as f64 / 1000.0,
+                )
+            } else {
+                "Sweep snapshot — no sweep data yet".into()
+            };
+            drop(m);
+            state.lock().unwrap_or_else(|e| e.into_inner()).push_log(msg);
         }
         KeyCode::Char('s') => {
             let mut m = state.lock().unwrap_or_else(|e| e.into_inner());

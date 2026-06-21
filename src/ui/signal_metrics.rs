@@ -30,6 +30,10 @@ fn fmt_bw(hz: u64) -> String {
 impl Panel for SignalMetricsPanel {
     fn name(&self) -> &'static str { "signal_metrics" }
     fn min_size(&self) -> (u16, u16) { (32, 6) }
+    fn focus_key(&self) -> Option<char> { Some('n') }
+    fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
+        &[("C", "Snapshot to log")]
+    }
 
     fn render(&self, f: &mut Frame, area: ratatui::layout::Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         let stale = state.waterfall.last_fft.as_ref()
