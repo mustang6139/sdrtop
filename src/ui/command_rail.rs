@@ -738,10 +738,19 @@ impl Panel for CommandRailPanel {
             ]));
         }
         let total = total_gain(state.radio.lna_gain, state.radio.vga_gain, gm.has_second_stage());
-        lines.push(Line::from(vec![
+        // TOTAL gain, plus the clip headroom (how far the in-channel level sits below
+        // full scale) when streaming — same quantity the BENCH lead-card reports.
+        let mut total_spans = vec![
             Span::raw(" "), lbl("TOTAL"),
             Span::styled(format!("{total} dB"), Style::default().fg(theme.value)),
-        ]));
+        ];
+        if active && pwr.is_finite() {
+            let headroom = (-pwr).max(0.0);
+            total_spans.push(Span::styled("  ·  ".to_string(), Style::default().fg(theme.border_dim)));
+            total_spans.push(Span::styled(format!("{headroom:.0} dB headroom"),
+                                          Style::default().fg(theme.label)));
+        }
+        lines.push(Line::from(total_spans));
         lines.push(Line::raw(""));
 
         // --- STREAM ------------------------------------------------------------
