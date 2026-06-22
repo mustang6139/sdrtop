@@ -28,8 +28,9 @@ pub use ui::{active_recall_slot, recall_from_hz, recall_to_hz, InputMode, LogLev
 pub use waterfall::{FftFrame, WaterfallState};
 
 pub const THROUGHPUT_HISTORY_LEN: usize = 64;
-/// SNR history depth — ~10 samples at the rx task's ~500 ms cadence ≈ 5 s window.
-pub const SNR_HISTORY_LEN: usize = 10;
+/// SNR/PWR/NF history depth — 120 samples at the 500 ms push cadence = 60 s window.
+/// Must be ≥ 2 × max scope_top_w so the braille mini-scope fills completely.
+pub const SNR_HISTORY_LEN: usize = 120;
 pub const DEFAULT_LNA_GAIN: u32 = 16;
 pub const DEFAULT_VGA_GAIN: u32 = 20;
 pub const DEFAULT_FREQUENCY: u64 = 2_400_000_000;

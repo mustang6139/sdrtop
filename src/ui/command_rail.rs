@@ -25,7 +25,7 @@ use ratatui::{
 use std::collections::VecDeque;
 
 use crate::state::{active_recall_slot, RailMode, SdrMetrics, RECALL_SLOTS};
-use super::charts::{ema_smooth, mini_braille_scope};
+use super::charts::{ema_smooth, mini_braille_row};
 use super::header::{active_digit_idx, gain_bar, vfo_spans, vfo_string};
 use super::micro_common::{fft_stale, fmt_rbw, snr_color};
 use super::panel::Panel;
@@ -80,53 +80,73 @@ fn trend_arrow(delta: Option<f32>, eps: f32, good_when_rising: Option<bool>,
     Some(Span::styled(glyph, Style::default().fg(color)))
 }
 
-/// One metric as the rail's 2-row braille block.
-/// Row 1: `LABEL scope_top`
-/// Row 2: `(spaces) scope_bot VALUE UNIT arrow`
-/// When value is None (stale), scope still renders from history; value shows as "—".
+/// Width of the fixed label field (margin + 3-char label + gap) so every metric
+/// box left edge aligns — labels are SNR/PWR/SAT (3) and NF (2).
+const METRIC_LABEL_W: usize = 3;
+const METRIC_LEAD: usize = 1 + METRIC_LABEL_W + 1;
+
+/// One metric as a framed single-row braille history box (3 rows):
+/// ```text
+///       ┌────────────┐
+///  SNR  │⣷⣶⣄⣀⣤⣶⣷⣿⣷⣶│  43.7 dB ↗
+///       └────────────┘
+/// ```
+/// The box never overlaps the label (left) or the value (right); the scope width
+/// shrinks with the rail. When value is None (stale) the box still draws history
+/// from the buffer and the value shows as a dim "—".
 fn metric_block(label: &str, unit: &str, value: Option<String>, value_color: Color,
                 history: &VecDeque<f32>, arrow: Option<Span<'static>>, iw: usize,
-                theme: &crate::Theme) -> [Line<'static>; 2] {
-    // n = leading margin (1) + label + gap (1)
-    let n = 1 + label.chars().count() + 1;
-
+                theme: &crate::Theme) -> [Line<'static>; 3] {
     let val_str = value.as_deref().unwrap_or("—").to_string();
     let arrow_w = if value.is_some() { arrow.as_ref().map_or(0, |_| 2) } else { 0 };
-    // right part: " " + val + " " + unit + arrow
+    // Columns reserved to the right of the box: " " + val + " " + unit + [" " + arrow].
     let val_right_w = 1 + val_str.chars().count() + 1 + unit.chars().count() + arrow_w;
-    let scope_w = iw.saturating_sub(n + val_right_w).max(4);
+    // Two columns go to the box borders (│ … │). Floor keeps a usable scope on a
+    // narrow rail; the value is what clips first only at the extreme minimum width.
+    let scope_w = iw.saturating_sub(METRIC_LEAD + 2 + val_right_w).max(4);
 
     let data: Vec<f32> = history.iter().copied().collect();
     let smoothed = ema_smooth(&data, 0.3);
-    let [scope_top, scope_bot] = mini_braille_scope(&smoothed, scope_w);
+    let scope = mini_braille_row(&smoothed, scope_w);
 
     let scope_col = if value.is_some() { value_color } else { theme.border_dim };
     let val_col   = if value.is_some() { value_color } else { theme.stale };
+    let border_st = Style::default().fg(theme.border_dim);
 
-    // Row 1: " LABEL scope_top"
-    let row1 = Line::from(vec![
-        Span::raw(" "),
-        Span::styled(label.to_string(), Style::default().fg(theme.label)),
-        Span::raw(" "),
-        Span::styled(scope_top, Style::default().fg(scope_col)),
+    // Row 0: top border, aligned under the box left edge.
+    let row0 = Line::from(vec![
+        Span::raw(" ".repeat(METRIC_LEAD)),
+        Span::styled(format!("┌{}┐", "─".repeat(scope_w)), border_st),
     ]);
 
-    // Row 2: spaces(n) + scope_bot + " " + val + " " + unit + [" " + arrow]
-    let mut spans: Vec<Span<'static>> = vec![
-        Span::raw(" ".repeat(n)),
-        Span::styled(scope_bot, Style::default().fg(scope_col)),
+    // Row 1: " LABEL │ scope │  VALUE UNIT arrow"
+    let mut mid: Vec<Span<'static>> = vec![
+        Span::raw(" "),
+        Span::styled(format!("{label:<w$}", w = METRIC_LABEL_W), Style::default().fg(theme.label)),
+        Span::raw(" "),
+        Span::styled("│".to_string(), border_st),
+        Span::styled(scope, Style::default().fg(scope_col)),
+        Span::styled("│".to_string(), border_st),
         Span::raw(" "),
         Span::styled(val_str, Style::default().fg(val_col).add_modifier(Modifier::BOLD)),
     ];
     if value.is_some() {
-        spans.push(Span::raw(" "));
-        spans.push(Span::styled(unit.to_string(), Style::default().fg(theme.border_dim)));
+        mid.push(Span::raw(" "));
+        mid.push(Span::styled(unit.to_string(), Style::default().fg(theme.border_dim)));
         if let Some(a) = arrow {
-            spans.push(Span::raw(" "));
-            spans.push(a);
+            mid.push(Span::raw(" "));
+            mid.push(a);
         }
     }
-    [row1, Line::from(spans)]
+    let row1 = Line::from(mid);
+
+    // Row 2: bottom border.
+    let row2 = Line::from(vec![
+        Span::raw(" ".repeat(METRIC_LEAD)),
+        Span::styled(format!("└{}┘", "─".repeat(scope_w)), border_st),
+    ]);
+
+    [row0, row1, row2]
 }
 
 /// Colour for the ADC-saturation value: calm below 10 %, warn to 50 %, crit above.

@@ -166,6 +166,60 @@ pub fn mini_braille_scope(data: &[f32], width: usize) -> [String; 2] {
     [top, bot]
 }
 
+/// Single-row braille filled-area mini-scope. Returns exactly `width` braille
+/// chars, each encoding 2 time samples (left/right dot columns) at 0..4 vertical
+/// levels, auto-scaled to the most recent 2×width samples' min..max. Used by the
+/// command rail's framed metric boxes (one braille row inside a `┌─┐` border).
+pub fn mini_braille_row(data: &[f32], width: usize) -> String {
+    if width == 0 { return String::new(); }
+
+    let n_samples = width * 2;
+    let start = data.len().saturating_sub(n_samples);
+    let window = &data[start..];
+
+    let (lo, hi) = window.iter().copied()
+        .filter(|v| v.is_finite())
+        .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
+    let range = if lo.is_finite() && hi.is_finite() && (hi - lo) > 1e-6 {
+        hi - lo
+    } else {
+        return " ".repeat(width);
+    };
+
+    let level = |v: f32| -> usize {
+        if !v.is_finite() { return 0; }
+        ((v - lo) / range * 4.0).round().clamp(0.0, 4.0) as usize
+    };
+    // Fill upward within a single braille cell: left column dots 7,3,2,1; right
+    // column dots 8,6,5,4 (bottom→top).
+    let left_bits = |lv: usize| -> u8 {
+        let mut b = 0u8;
+        if lv >= 1 { b |= 0x40; } // dot 7
+        if lv >= 2 { b |= 0x04; } // dot 3
+        if lv >= 3 { b |= 0x02; } // dot 2
+        if lv >= 4 { b |= 0x01; } // dot 1
+        b
+    };
+    let right_bits = |lv: usize| -> u8 {
+        let mut b = 0u8;
+        if lv >= 1 { b |= 0x80; } // dot 8
+        if lv >= 2 { b |= 0x20; } // dot 6
+        if lv >= 3 { b |= 0x10; } // dot 5
+        if lv >= 4 { b |= 0x08; } // dot 4
+        b
+    };
+
+    let mut s = String::with_capacity(width * 3);
+    for col in 0..width {
+        let li = col * 2;
+        let ri = li + 1;
+        let lv = if li < window.len() { level(window[li]) } else { 0 };
+        let rv = if ri < window.len() { level(window[ri]) } else { 0 };
+        s.push(char::from_u32(0x2800 + (left_bits(lv) | right_bits(rv)) as u32).unwrap_or(' '));
+    }
+    s
+}
+
 /// Canvas filled-column graph — same style as the spectrum panel (filled columns + outline).
 /// Accepts a plain `&[u64]` slice. Scales automatically to the data maximum.
 pub fn draw_mini_graph(f: &mut Frame, area: Rect, data: &[u64], color: Color) {
@@ -276,6 +330,28 @@ mod tests {
         let data: Vec<f32> = (0..=16).map(|i| i as f32).collect();
         let [t, b] = mini_braille_scope(&data, 4);
         for c in t.chars().chain(b.chars()) {
+            assert!(c as u32 >= 0x2800 && c as u32 <= 0x28FF, "non-braille char: {c:?}");
+        }
+    }
+
+    #[test]
+    fn mini_braille_row_always_width_chars() {
+        assert_eq!(mini_braille_row(&[], 6).chars().count(), 6);
+        assert_eq!(mini_braille_row(&[1.0; 20], 6).chars().count(), 6);
+        assert_eq!(mini_braille_row(&[1.0; 3], 0).chars().count(), 0);
+    }
+
+    #[test]
+    fn mini_braille_row_empty_data_returns_spaces() {
+        assert!(mini_braille_row(&[], 4).chars().all(|c| c == ' '));
+        // A flat series has no range → spaces (nothing to plot).
+        assert!(mini_braille_row(&[-50.0; 8], 4).chars().all(|c| c == ' '));
+    }
+
+    #[test]
+    fn mini_braille_row_rising_ramp_is_braille() {
+        let data: Vec<f32> = (0..=16).map(|i| i as f32).collect();
+        for c in mini_braille_row(&data, 4).chars() {
             assert!(c as u32 >= 0x2800 && c as u32 <= 0x28FF, "non-braille char: {c:?}");
         }
     }
