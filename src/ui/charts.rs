@@ -114,6 +114,39 @@ pub fn gain_bar_colored(val: u32, max_val: u32, n: usize,
     spans
 }
 
+/// Bipolar "null meter": a centre-zero track where a coloured needle (`●`) deviates
+/// from the centre tick (`┃`) by `value / full_scale`, with the span between centre
+/// and needle filled (`▓`). `width` is the track width; the returned spans add `◄`/`►`
+/// end arrows, so the total width is `width + 2`. The needle and fill carry `color`
+/// (the caller's severity colour); the track, centre and arrows are `dim`. Ideal for
+/// deviation-from-ideal readings (DC offset, IQ amplitude / phase imbalance).
+pub fn null_meter(value: f64, full_scale: f64, width: usize,
+                  color: Color, dim: Color) -> Vec<Span<'static>> {
+    let w = width.max(3);
+    let center = w / 2;
+    let frac = if full_scale > 0.0 { (value / full_scale).clamp(-1.0, 1.0) } else { 0.0 };
+    let needle = ((center as f64 + frac * center as f64).round() as isize)
+        .clamp(0, w as isize - 1) as usize;
+    let (lo, hi) = (center.min(needle), center.max(needle));
+
+    let mut spans = Vec::with_capacity(w + 2);
+    spans.push(Span::styled("◄".to_string(), Style::default().fg(dim)));
+    for x in 0..w {
+        let (ch, col) = if x == needle {
+            ('●', color)
+        } else if x == center {
+            ('┃', dim)
+        } else if x > lo && x < hi {
+            ('▓', color) // filled deviation between centre and needle
+        } else {
+            ('·', dim)    // empty track
+        };
+        spans.push(Span::styled(ch.to_string(), Style::default().fg(col)));
+    }
+    spans.push(Span::styled("►".to_string(), Style::default().fg(dim)));
+    spans
+}
+
 /// Single-row braille **line trace** — an oscilloscope-style connected curve (not a
 /// filled area). Returns exactly `width` braille chars, each holding 2 time samples
 /// (left/right dot columns) over 4 vertical levels, auto-scaled to the most recent
@@ -319,6 +352,41 @@ mod tests {
             Color::Rgb(0, 200, 0), Color::Rgb(200, 200, 0), Color::Rgb(20, 20, 20));
         let s: String = spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(s.chars().all(|c| c == ' '), "got {s:?}");
+    }
+
+    #[test]
+    fn null_meter_total_width_is_width_plus_arrows() {
+        let m = null_meter(0.0, 1.0, 16, Color::Rgb(0, 200, 0), Color::Rgb(20, 20, 20));
+        let total: usize = m.iter().map(|s| s.content.chars().count()).sum();
+        assert_eq!(total, 18, "16 track + 2 arrows");
+    }
+
+    #[test]
+    fn null_meter_needle_centres_at_zero() {
+        let m = null_meter(0.0, 1.0, 17, Color::Rgb(0, 200, 0), Color::Rgb(20, 20, 20));
+        let s: String = m.iter().map(|s| s.content.as_ref()).collect();
+        let needle = s.chars().position(|c| c == '●').unwrap();
+        // 17-wide track, centre = 8, plus the leading ◄ → index 9.
+        assert_eq!(needle, 9);
+    }
+
+    #[test]
+    fn null_meter_needle_deflects_with_sign() {
+        let dim = Color::Rgb(20, 20, 20);
+        let col = Color::Rgb(0, 200, 0);
+        let pos: String = null_meter(0.8, 1.0, 17, col, dim).iter().map(|s| s.content.as_ref()).collect();
+        let neg: String = null_meter(-0.8, 1.0, 17, col, dim).iter().map(|s| s.content.as_ref()).collect();
+        let center = 9; // includes ◄
+        assert!(pos.chars().position(|c| c == '●').unwrap() > center, "positive deflects right");
+        assert!(neg.chars().position(|c| c == '●').unwrap() < center, "negative deflects left");
+    }
+
+    #[test]
+    fn null_meter_clamps_out_of_range() {
+        // |value| > full_scale must not panic and stays within the track.
+        let m = null_meter(99.0, 1.0, 16, Color::Rgb(0, 200, 0), Color::Rgb(20, 20, 20));
+        let total: usize = m.iter().map(|s| s.content.chars().count()).sum();
+        assert_eq!(total, 18);
     }
 
     #[test]

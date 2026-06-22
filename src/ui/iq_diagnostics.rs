@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph},
@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::state::SdrMetrics;
+use crate::ui::charts::{gain_bar_colored, null_meter};
 use crate::ui::panel::Panel;
 
 pub struct IqDiagnosticsPanel;
@@ -151,109 +152,110 @@ impl Panel for IqDiagnosticsPanel {
             return;
         }
 
-        let rows = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1), // [0] DC offset I
-                Constraint::Length(1), // [1] DC offset Q
-                Constraint::Length(1), // [2] DC magnitude bar
-                Constraint::Length(1), // [3] DC spike dBFS
-                Constraint::Length(1), // [4] blank
-                Constraint::Length(1), // [5] IQ amplitude imbalance
-                Constraint::Length(1), // [6] IQ phase imbalance
-                Constraint::Length(1), // [7] Image Rejection Ratio
-                Constraint::Length(1), // [8] hint
-                Constraint::Min(0),
+        let iw = inner.width as usize;
+        let dim = theme.border_dim;
+        let lbl_st = Style::default().fg(theme.label);
+
+        // Fixed label field (3-wide) + a right value budget, so every meter/bar
+        // starts and ends at the same column and the readings line up. The meter
+        // (arrows + track) and the gradient bar share one visual width (`field_w`).
+        const LEAD: usize = 5;       // " LBL " = space + 3 + space
+        const VALUE_W: usize = 10;
+        let field_w = iw.saturating_sub(LEAD + 1 + VALUE_W).max(8);
+        let track_w = field_w.saturating_sub(2); // null_meter adds 2 arrow columns
+
+        // ├╴ SECTION ╶──── nameplate — the same language as the command rail.
+        let section = |name: &str| {
+            let label = name.to_uppercase();
+            let used = label.chars().count() + 5;
+            Line::from(vec![
+                Span::styled("├╴ ".to_string(), Style::default().fg(dim)),
+                Span::styled(label, Style::default().fg(theme.label).add_modifier(Modifier::BOLD)),
+                Span::styled(" ╶".to_string(), Style::default().fg(dim)),
+                Span::styled("─".repeat(iw.saturating_sub(used)), Style::default().fg(dim)),
             ])
-            .split(inner);
+        };
+        // " LBL " + bipolar null-meter + "  value"
+        let meter_row = |label: &str, value: f64, full_scale: f64, color: Color,
+                         val_str: String| -> Line<'static> {
+            let mut spans = vec![
+                Span::raw(" "),
+                Span::styled(format!("{label:<3}"), lbl_st),
+                Span::raw(" "),
+            ];
+            spans.extend(null_meter(value, full_scale, track_w, color, dim));
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled(val_str, Style::default().fg(color).add_modifier(Modifier::BOLD)));
+            Line::from(spans)
+        };
+        // " LBL " + gradient quality bar + "  value" (frac 0..1 maps the fill).
+        let bar_row = |label: &str, frac: f64, lo: Color, hi: Color, val_color: Color,
+                       val_str: String| -> Line<'static> {
+            let v = (frac.clamp(0.0, 1.0) * 1000.0) as u32;
+            let mut spans = vec![
+                Span::raw(" "),
+                Span::styled(format!("{label:<3}"), lbl_st),
+                Span::raw(" "),
+            ];
+            spans.extend(gain_bar_colored(v, 1000, field_w, lo, hi, dim));
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled(val_str, Style::default().fg(val_color).add_modifier(Modifier::BOLD)));
+            Line::from(spans)
+        };
 
-        let lbl = Style::default().fg(theme.label);
+        let mut lines: Vec<Line> = Vec::new();
 
-        // DC offsets
+        // --- DC OFFSET ---------------------------------------------------------
+        // I / Q offsets are deviations from zero → null-meters; magnitude is a
+        // green→red quality bar; the spike is a plain level readout.
+        lines.push(section("DC offset"));
         let i_color = offset_color(state.iq.dc_offset_i.abs(), theme);
         let q_color = offset_color(state.iq.dc_offset_q.abs(), theme);
-        f.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled("DC  I ", lbl),
-                Span::styled(format!("{:+.4}", state.iq.dc_offset_i), Style::default().fg(i_color)),
-            ])),
-            rows[0],
-        );
-        f.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled("    Q ", lbl),
-                Span::styled(format!("{:+.4}", state.iq.dc_offset_q), Style::default().fg(q_color)),
-            ])),
-            rows[1],
-        );
+        lines.push(meter_row("I", state.iq.dc_offset_i as f64, 0.05, i_color,
+                             format!("{:+.4}", state.iq.dc_offset_i)));
+        lines.push(meter_row("Q", state.iq.dc_offset_q as f64, 0.05, q_color,
+                             format!("{:+.4}", state.iq.dc_offset_q)));
 
-        // DC magnitude bar — f64 precision (see comment on dc_mag below)
         let dc_mag   = (state.iq.dc_offset_i as f64).hypot(state.iq.dc_offset_q as f64);
-        let dc_ratio = (dc_mag / 0.05).min(1.0);
         let dc_color = offset_color(dc_mag as f32, theme);
-        crate::ui::charts::draw_hbar(
-            f, rows[2], dc_ratio,
-            "DC mag ",
-            &format!("{:.4}", dc_mag),
-            dc_color, theme,
-        );
+        lines.push(bar_row("MAG", dc_mag / 0.05, theme.status_ok, theme.status_crit,
+                           dc_color, format!("{dc_mag:.4}")));
 
-        // DC spike level: how tall the DC spike appears in the spectrum
         let spike = dc_spike_dbfs(dc_mag);
         let (spike_str, spike_col) = match spike {
-            Some(s) => (format!("{:.1} dBFS", s), spike_color(s, theme)),
-            None    => ("---".to_string(), theme.label),
+            Some(s) => (format!("{s:.1} dBFS"), spike_color(s, theme)),
+            None    => ("—".to_string(), theme.label),
         };
-        f.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled("DC spike      ", lbl),
-                Span::styled(spike_str, Style::default().fg(spike_col)),
-            ])),
-            rows[3],
-        );
+        lines.push(Line::from(vec![
+            Span::raw(" "),
+            Span::styled("SPK", lbl_st),
+            Span::raw("  "),
+            Span::styled(spike_str, Style::default().fg(spike_col)),
+        ]));
 
-        // IQ amplitude imbalance
+        lines.push(Line::raw(""));
+
+        // --- QUADRATURE --------------------------------------------------------
+        // Amplitude / phase imbalance are deviations from balance → null-meters;
+        // IRR (higher = better) is a red→green quality bar.
+        lines.push(section("Quadrature"));
         let amp_abs = state.iq.iq_imbalance_db.abs();
-        f.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled("Amp imbalance ", lbl),
-                Span::styled(
-                    format!("{:+.2} dB", state.iq.iq_imbalance_db),
-                    Style::default().fg(imbalance_color(amp_abs, theme)),
-                ),
-            ])),
-            rows[5],
-        );
-
-        // IQ phase imbalance
+        lines.push(meter_row("AMP", state.iq.iq_imbalance_db as f64, 4.0,
+                             imbalance_color(amp_abs, theme),
+                             format!("{:+.2} dB", state.iq.iq_imbalance_db)));
         let phase_abs = state.iq.phase_imbalance_deg.abs();
-        f.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled("Phase imbal   ", lbl),
-                Span::styled(
-                    format!("{:+.2}°", state.iq.phase_imbalance_deg),
-                    Style::default().fg(phase_color(phase_abs, theme)),
-                ),
-            ])),
-            rows[6],
-        );
+        lines.push(meter_row("PHA", state.iq.phase_imbalance_deg as f64, 6.0,
+                             phase_color(phase_abs, theme),
+                             format!("{:+.2}\u{b0}", state.iq.phase_imbalance_deg)));
 
-        // Image Rejection Ratio — the key quadrature quality metric
         let irr = image_rejection_db(state.iq.iq_imbalance_db, state.iq.phase_imbalance_deg);
-        let irr_str = if irr >= 60.0 {
-            "> 60 dB".to_string()
-        } else {
-            format!("{:.1} dB", irr)
-        };
-        f.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled("IRR           ", lbl),
-                Span::styled(irr_str, Style::default().fg(irr_color(irr, theme))),
-            ])),
-            rows[7],
-        );
+        let irr_str = if irr >= 60.0 { "> 60 dB".to_string() } else { format!("{irr:.1} dB") };
+        lines.push(bar_row("IRR", irr / 60.0, theme.status_crit, theme.status_ok,
+                           irr_color(irr, theme), irr_str));
 
-        // Contextual hint
+        lines.push(Line::raw(""));
+
+        // --- verdict -----------------------------------------------------------
         let hint = if amp_abs > 3.0 || phase_abs > 5.0 {
             "⚠ IQ mismatch — consider calibration"
         } else if dc_mag > 0.02 {
@@ -268,11 +270,13 @@ impl Panel for IqDiagnosticsPanel {
         } else if dc_mag as f32 > 0.02 || amp_abs > 1.0 || phase_abs > 2.0 {
             theme.status_warn
         } else {
-            theme.label
+            theme.status_ok
         };
-        f.render_widget(
-            Paragraph::new(Span::styled(hint, Style::default().fg(hint_color))),
-            rows[8],
-        );
+        lines.push(Line::from(vec![
+            Span::raw(" "),
+            Span::styled(hint, Style::default().fg(hint_color)),
+        ]));
+
+        f.render_widget(Paragraph::new(lines), inner);
     }
 }
