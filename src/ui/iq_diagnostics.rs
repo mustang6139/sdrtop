@@ -213,13 +213,16 @@ impl Panel for IqDiagnosticsPanel {
         let q_color = offset_color(state.iq.dc_offset_q.abs(), theme);
         lines.push(meter_row("I", state.iq.dc_offset_i as f64, 0.05, i_color,
                              format!("{:+.4}", state.iq.dc_offset_i)));
+        lines.push(Line::raw(""));
         lines.push(meter_row("Q", state.iq.dc_offset_q as f64, 0.05, q_color,
                              format!("{:+.4}", state.iq.dc_offset_q)));
+        lines.push(Line::raw(""));
 
         let dc_mag   = (state.iq.dc_offset_i as f64).hypot(state.iq.dc_offset_q as f64);
         let dc_color = offset_color(dc_mag as f32, theme);
         lines.push(bar_row("MAG", dc_mag / 0.05, theme.status_ok, theme.status_crit,
                            dc_color, format!("{dc_mag:.4}")));
+        lines.push(Line::raw(""));
 
         let spike = dc_spike_dbfs(dc_mag);
         let (spike_str, spike_col) = match spike {
@@ -243,10 +246,12 @@ impl Panel for IqDiagnosticsPanel {
         lines.push(meter_row("AMP", state.iq.iq_imbalance_db as f64, 4.0,
                              imbalance_color(amp_abs, theme),
                              format!("{:+.2} dB", state.iq.iq_imbalance_db)));
+        lines.push(Line::raw(""));
         let phase_abs = state.iq.phase_imbalance_deg.abs();
         lines.push(meter_row("PHA", state.iq.phase_imbalance_deg as f64, 6.0,
                              phase_color(phase_abs, theme),
                              format!("{:+.2}\u{b0}", state.iq.phase_imbalance_deg)));
+        lines.push(Line::raw(""));
 
         let irr = image_rejection_db(state.iq.iq_imbalance_db, state.iq.phase_imbalance_deg);
         let irr_str = if irr >= 60.0 { "> 60 dB".to_string() } else { format!("{irr:.1} dB") };
@@ -277,6 +282,12 @@ impl Panel for IqDiagnosticsPanel {
             Span::styled(hint, Style::default().fg(hint_color)),
         ]));
 
+        // Self-adjusting density: drop the airy spacers if the panel is too short to
+        // hold them, so a small lab pane still shows every reading. The section
+        // nameplates keep the grouping either way.
+        if lines.len() > inner.height as usize {
+            lines.retain(|l| l.spans.iter().any(|s| !s.content.trim().is_empty()));
+        }
         f.render_widget(Paragraph::new(lines), inner);
     }
 }
