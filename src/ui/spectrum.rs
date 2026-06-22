@@ -272,6 +272,10 @@ pub fn render(f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Them
                 };
                 let right_hz = left_hz + bw;
                 let noise_floor = frame.noise_floor;
+                // Cheap Arc clones of the *displayed* bins kept for the post-canvas
+                // auto-peak flag section — the canvas paint closure moves bins/peaks.
+                let flag_bins = Arc::clone(&bins);
+                let flag_peaks = Arc::clone(&peaks);
 
                 // Dynamic y-range from state (user-controlled zoom)
                 let y_min_f = state.spectrum.y_min;
@@ -528,7 +532,10 @@ pub fn render(f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Them
                     let cw = canvas_area.width;
                     let ch = canvas_area.height;
                     let min_sep = (n_bins / 24).max(1);
-                    let peak_idxs = detect_peaks(&frame.bins_dbfs, frame.noise_floor, 5, min_sep);
+                    // Detect on the *displayed* (possibly zoomed) bins so each flag's
+                    // column and frequency match the visible window. Using the full
+                    // frame here mislocated every flag (and showed wrong MHz) when zoomed.
+                    let peak_idxs = detect_peaks(&flag_bins[..], noise_floor, 5, min_sep);
 
                     // Per-row occupancy so flags never type over each other.
                     let mut row_occ: Vec<Vec<(u16, u16)>> = vec![Vec::new(); ch as usize];
@@ -536,12 +543,12 @@ pub fn render(f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Them
                         let freq   = left_hz + bw * (idx as f64 / (n_bins - 1).max(1) as f64);
                         let frac_x = ((freq - left_hz) / bw).clamp(0.0, 1.0);
                         let col0   = (frac_x * cw as f64) as u16;
-                        let amp    = frame.peak_hold.get(idx).copied().unwrap_or(frame.bins_dbfs[idx]);
+                        let amp    = flag_peaks.get(idx).copied().unwrap_or(flag_bins[idx]);
                         let frac_y = ((y_max_f - amp) / span).clamp(0.0, 1.0);
                         let tip_row = (frac_y * (ch - 1) as f32) as u16;
 
-                        let label = format!("\u{25B2}{:.2}", freq / 1_000_000.0);
-                        let lw    = label.chars().count() as u16;
+                        let num   = format!("{:.2}", freq / 1_000_000.0);
+                        let lw    = 1 + num.chars().count() as u16; // ▲ + digits
                         let col   = col0.min(cw.saturating_sub(lw));
 
                         // Prefer the row just above the tip; climb until a clear slot.
@@ -556,12 +563,16 @@ pub fn render(f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Them
                         }
                         if let Some(ru) = placed {
                             row_occ[ru as usize].push((col, col + lw + 1));
+                            // Soft flag: the ▲ keeps the peak-hold hue to mark the
+                            // carrier, the frequency text is dimmed so it reads as a
+                            // quiet annotation rather than shouting over the trace.
                             f.render_widget(
-                                Paragraph::new(Span::styled(
-                                    label,
-                                    Style::default().fg(theme.peak_hold).add_modifier(Modifier::BOLD),
-                                )),
-                                Rect { x: canvas_area.x + col, y: canvas_area.y + ru, width: lw, height: 1 },
+                                Paragraph::new(Line::from(vec![
+                                    Span::styled("\u{25B2}", Style::default().fg(theme.peak_hold)),
+                                    Span::styled(num, Style::default().fg(dim(theme.peak_hold, 0.55))),
+                                ])),
+                                Rect { x: canvas_area.x + col, y: canvas_area.y + ru,
+                                       width: lw.min(cw.saturating_sub(col)), height: 1 },
                             );
                         }
                     }

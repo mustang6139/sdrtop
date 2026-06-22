@@ -304,26 +304,24 @@ fn mode_tabs_full_w() -> usize {
     1 + RailMode::ALL.iter().map(|m| m.label().len() + 3).sum::<usize>()
 }
 
-/// The `HUNT·MONITOR·BENCH` mode strip — every mode framed as a `[LABEL]` chip:
-/// the active one lit (bright `value_hi` brackets + filled label), the inactive
-/// ones a dim grey outline (`border_dim` brackets + muted label) so they read as
-/// framed-but-off. Falls back to 3-letter codes when the rail is too narrow for the
-/// full labels, so the strip never clips mid-word. `[LABEL]` is the same width as
-/// the old ` LABEL ` chip, so the strip's width budget is unchanged.
+/// The `HUNT·MONITOR·BENCH` mode strip — every mode a filled ` LABEL ` chip: the
+/// active one lit bright (`value_hi` bg, bold), the inactive ones the same chip in a
+/// muted "inactive" fill (`border_dim` bg) so they read as selected-but-off rather
+/// than plain text. Both use dark text on the fill. Falls back to 3-letter codes
+/// when the rail is too narrow for the full labels, so the strip never clips
+/// mid-word.
 fn mode_tabs_line(active: RailMode, iw: usize, theme: &crate::Theme) -> Line<'static> {
     let compact = mode_tabs_full_w() > iw;
+    let ink = Color::Rgb(4, 6, 15); // dark text on the chip fill
     let mut spans = vec![Span::raw(" ")];
     for m in RailMode::ALL {
         let label = if compact { &m.label()[..3] } else { m.label() };
-        let (bracket_col, label_style) = if m == active {
-            (theme.value_hi,
-             Style::default().fg(Color::Rgb(4, 6, 15)).bg(theme.value_hi).add_modifier(Modifier::BOLD))
+        let style = if m == active {
+            Style::default().fg(ink).bg(theme.value_hi).add_modifier(Modifier::BOLD)
         } else {
-            (theme.border_dim, Style::default().fg(theme.label))
+            Style::default().fg(ink).bg(theme.border_dim)
         };
-        spans.push(Span::styled("[", Style::default().fg(bracket_col)));
-        spans.push(Span::styled(label.to_string(), label_style));
-        spans.push(Span::styled("]", Style::default().fg(bracket_col)));
+        spans.push(Span::styled(format!(" {label} "), style));
         spans.push(Span::raw(" "));
     }
     Line::from(spans)
@@ -709,6 +707,7 @@ impl Panel for CommandRailPanel {
             Span::raw(" "), lbl(gm.boost_label()),
             Span::styled(boost_val, Style::default().fg(boost_col)),
         ]));
+        lines.push(Line::raw(""));
         // A gain row: ` LABEL [⅛-block bar] value`. When streaming the bar shades
         // along a meaning gradient (LNA green→yellow, VGA cyan→orange); idle it's a
         // flat dim ⅛-block (the header keeps its own flat bar — separate code path).
@@ -730,10 +729,12 @@ impl Panel for CommandRailPanel {
         // Primary stage (LNA / Tuner): green → yellow.
         lines.push(gain_row(lbl(gm.primary_label()), state.radio.lna_gain,
                             gm.primary_max_db(), theme.status_ok, theme.value_hi));
+        lines.push(Line::raw(""));
         // Secondary stage (HackRF VGA only): cyan → orange.
         if gm.has_second_stage() {
             lines.push(gain_row(lbl("VGA"), state.radio.vga_gain, 62,
                                 theme.border_accent, theme.status_warn));
+            lines.push(Line::raw(""));
         }
         let total = total_gain(state.radio.lna_gain, state.radio.vga_gain, gm.has_second_stage());
         // TOTAL gain, plus the clip headroom (how far the in-channel level sits below
@@ -756,8 +757,10 @@ impl Panel for CommandRailPanel {
         let stream_val = |s: String| Span::styled(s, Style::default().fg(if active { theme.value } else { theme.label }));
         lines.push(Line::from(vec![Span::raw(" "), lbl("DROP"),
             stream_val(format!("{} /s", state.signal.drops_per_sec))]));
+        lines.push(Line::raw(""));
         lines.push(Line::from(vec![Span::raw(" "), lbl("BUF"),
             stream_val(format!("{:.0} %", state.iq.buf_fill_pct))]));
+        lines.push(Line::raw(""));
         lines.push(Line::from(vec![Span::raw(" "), lbl("USB"),
             stream_val(fmt_mb(if active { state.radio.current_throughput_bps } else { 0 }))]));
 
@@ -891,9 +894,9 @@ mod tests {
 
     #[test]
     fn mode_tabs_full_width_is_the_label_budget() {
-        // "[HUNT]" + gap + "[MONITOR]" + gap + "[BENCH]" + gap, plus leading space.
-        // Each chip is label+2 (brackets) + 1 gap = label+3, same budget as the old
-        // " LABEL " chip: (4+3) + (7+3) + (5+3) + 1 = 26.
+        // " HUNT " + gap + " MONITOR " + gap + " BENCH " + gap, plus leading space.
+        // Each chip is label+2 (pad spaces) + 1 gap = label+3:
+        // (4+3) + (7+3) + (5+3) + 1 = 26.
         assert_eq!(mode_tabs_full_w(), 26);
         // Compact kicks in below that — the strip then uses 3-letter codes.
         assert!(mode_tabs_full_w() > 20, "narrow rail must compact");
