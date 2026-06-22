@@ -40,35 +40,6 @@ pub fn draw_hbar(
     );
 }
 
-/// A one-line inline sparkline from the most recent `width` samples, drawn with
-/// the `▁▂▃▄▅▆▇█` ramp and auto-scaled to the window's own min..max. Returns a
-/// string of exactly `width` columns (left-padded with spaces when there are
-/// fewer samples than `width`). Non-finite samples render as a gap. Used by the
-/// command rail's metric rows.
-pub fn sparkline(data: &[f32], width: usize) -> String {
-    const RAMP: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-    if width == 0 { return String::new(); }
-    if data.is_empty() { return " ".repeat(width); }
-
-    let start  = data.len().saturating_sub(width);
-    let window = &data[start..];
-    let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
-    for &v in window {
-        if v.is_finite() { lo = lo.min(v); hi = hi.max(v); }
-    }
-    if !lo.is_finite() || !hi.is_finite() { return " ".repeat(width); }
-    let range = (hi - lo).max(1e-6);
-
-    let mut s = String::with_capacity(width);
-    for _ in 0..width.saturating_sub(window.len()) { s.push(' '); }
-    for &v in window {
-        if !v.is_finite() { s.push(' '); continue; }
-        let t = (((v - lo) / range) * 7.0).round().clamp(0.0, 7.0) as usize;
-        s.push(RAMP[t]);
-    }
-    s
-}
-
 /// EMA smoothing — alpha near 1 = responsive, near 0 = smooth. Empty input → empty vec.
 pub fn ema_smooth(data: &[f32], alpha: f32) -> Vec<f32> {
     if data.is_empty() { return Vec::new(); }
@@ -96,74 +67,6 @@ pub fn eighth_block_bar(val: u32, max_val: u32, n: usize) -> (String, String) {
     let empty_start = if rem > 0 { full + 1 } else { full };
     let empty = " ".repeat(n.saturating_sub(empty_start));
     (filled, empty)
-}
-
-/// 2-row braille filled-area mini-scope. Returns `[top_row, bot_row]`, each exactly `width`
-/// Unicode characters wide. Renders from the most recent 2×width samples, auto-scaled.
-pub fn mini_braille_scope(data: &[f32], width: usize) -> [String; 2] {
-    if width == 0 { return [String::new(), String::new()]; }
-
-    let n_samples = width * 2;
-    let start = data.len().saturating_sub(n_samples);
-    let window = &data[start..];
-
-    let (lo, hi) = window.iter().copied()
-        .filter(|v| v.is_finite())
-        .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
-    let range = if lo.is_finite() && hi.is_finite() && (hi - lo) > 1e-6 {
-        hi - lo
-    } else {
-        return [" ".repeat(width), " ".repeat(width)];
-    };
-
-    let level = |v: f32| -> usize {
-        if !v.is_finite() { return 0; }
-        ((v - lo) / range * 8.0).round().clamp(0.0, 8.0) as usize
-    };
-
-    // Returns (top_bits, bot_bits) for the left dot-column of a braille cell.
-    // Fills upward from dot 7 (bottom-left) → dot 1 (top-left) for levels 1–4,
-    // then the same pattern in the top text row for levels 5–8.
-    let left_bits = |lv: usize| -> (u8, u8) {
-        let (mut t, mut b) = (0u8, 0u8);
-        if lv >= 1 { b |= 0x40; } // dot 7
-        if lv >= 2 { b |= 0x04; } // dot 3
-        if lv >= 3 { b |= 0x02; } // dot 2
-        if lv >= 4 { b |= 0x01; } // dot 1
-        if lv >= 5 { t |= 0x40; }
-        if lv >= 6 { t |= 0x04; }
-        if lv >= 7 { t |= 0x02; }
-        if lv >= 8 { t |= 0x01; }
-        (t, b)
-    };
-    let right_bits = |lv: usize| -> (u8, u8) {
-        let (mut t, mut b) = (0u8, 0u8);
-        if lv >= 1 { b |= 0x80; } // dot 8
-        if lv >= 2 { b |= 0x20; } // dot 6
-        if lv >= 3 { b |= 0x10; } // dot 5
-        if lv >= 4 { b |= 0x08; } // dot 4
-        if lv >= 5 { t |= 0x80; }
-        if lv >= 6 { t |= 0x20; }
-        if lv >= 7 { t |= 0x10; }
-        if lv >= 8 { t |= 0x08; }
-        (t, b)
-    };
-
-    let mut top = String::with_capacity(width * 3);
-    let mut bot = String::with_capacity(width * 3);
-
-    for col in 0..width {
-        let li = col * 2;
-        let ri = li + 1;
-        let lv = if li < window.len() { level(window[li]) } else { 0 };
-        let rv = if ri < window.len() { level(window[ri]) } else { 0 };
-        let (lt, lb) = left_bits(lv);
-        let (rt, rb) = right_bits(rv);
-        top.push(char::from_u32(0x2800 + (lt | rt) as u32).unwrap_or(' '));
-        bot.push(char::from_u32(0x2800 + (lb | rb) as u32).unwrap_or(' '));
-    }
-
-    [top, bot]
 }
 
 /// Single-row braille filled-area mini-scope. Returns exactly `width` braille
@@ -258,36 +161,6 @@ pub fn draw_mini_graph(f: &mut Frame, area: Rect, data: &[u64], color: Color) {
 mod tests {
     use super::*;
 
-    // Every sparkline char is single-column, so chars().count() == display width.
-    #[test]
-    fn sparkline_is_always_width_columns() {
-        assert_eq!(sparkline(&[], 6).chars().count(), 6);
-        assert_eq!(sparkline(&[1.0], 6).chars().count(), 6);
-        assert_eq!(sparkline(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 6).chars().count(), 6);
-        assert_eq!(sparkline(&[1.0; 3], 0).chars().count(), 0);
-    }
-
-    #[test]
-    fn sparkline_maps_extremes_to_ramp_ends() {
-        // A rising ramp ends low→high: first non-space is ▁, last is █.
-        let s: Vec<char> = sparkline(&[0.0, 1.0, 2.0, 3.0], 4).chars().collect();
-        assert_eq!(s[0], '▁');
-        assert_eq!(s[3], '█');
-    }
-
-    #[test]
-    fn sparkline_flat_series_does_not_panic_or_spike() {
-        // Equal samples → range floored to 1e-6, all map to the lowest bar.
-        let s = sparkline(&[-76.3; 6], 6);
-        assert!(s.chars().all(|c| c == '▁'));
-    }
-
-    #[test]
-    fn sparkline_left_pads_when_too_few_samples() {
-        let s = sparkline(&[5.0, 9.0], 6);
-        assert!(s.starts_with("    "), "got {s:?}");
-    }
-
     #[test]
     fn ema_smooth_single_sample_is_itself() {
         assert_eq!(ema_smooth(&[5.0f32], 0.5), vec![5.0f32]);
@@ -302,36 +175,6 @@ mod tests {
     #[test]
     fn ema_smooth_empty_returns_empty() {
         assert!(ema_smooth(&[], 0.5).is_empty());
-    }
-
-    #[test]
-    fn mini_braille_scope_always_width_chars() {
-        let [t, b] = mini_braille_scope(&[], 6);
-        assert_eq!(t.chars().count(), 6);
-        assert_eq!(b.chars().count(), 6);
-        let [t, b] = mini_braille_scope(&[1.0; 20], 6);
-        assert_eq!(t.chars().count(), 6);
-        assert_eq!(b.chars().count(), 6);
-        let [t, b] = mini_braille_scope(&[1.0; 3], 0);
-        assert_eq!(t.chars().count(), 0);
-        assert_eq!(b.chars().count(), 0);
-    }
-
-    #[test]
-    fn mini_braille_scope_empty_data_returns_spaces() {
-        let [t, b] = mini_braille_scope(&[], 4);
-        assert!(t.chars().all(|c| c == ' '), "top: {t:?}");
-        assert!(b.chars().all(|c| c == ' '), "bot: {b:?}");
-    }
-
-    #[test]
-    fn mini_braille_scope_rising_ramp_fills_upward() {
-        // Ramp 0→8: all chars must be valid braille codepoints (U+2800..=U+28FF).
-        let data: Vec<f32> = (0..=16).map(|i| i as f32).collect();
-        let [t, b] = mini_braille_scope(&data, 4);
-        for c in t.chars().chain(b.chars()) {
-            assert!(c as u32 >= 0x2800 && c as u32 <= 0x28FF, "non-braille char: {c:?}");
-        }
     }
 
     #[test]

@@ -84,6 +84,10 @@ fn trend_arrow(delta: Option<f32>, eps: f32, good_when_rising: Option<bool>,
 /// box left edge aligns — labels are SNR/PWR/SAT (3) and NF (2).
 const METRIC_LABEL_W: usize = 3;
 const METRIC_LEAD: usize = 1 + METRIC_LABEL_W + 1;
+/// Fixed right-column budget reserved for the value, so every metric box has the
+/// same width and their right edges align. Sized for the widest reading,
+/// `" -120.0 dBFS ↘"` (space + value + space + unit + space + arrow = 14).
+const METRIC_VALUE_W: usize = 14;
 
 /// One metric as a framed single-row braille history box (3 rows):
 /// ```text
@@ -98,12 +102,10 @@ fn metric_block(label: &str, unit: &str, value: Option<String>, value_color: Col
                 history: &VecDeque<f32>, arrow: Option<Span<'static>>, iw: usize,
                 theme: &crate::Theme) -> [Line<'static>; 3] {
     let val_str = value.as_deref().unwrap_or("—").to_string();
-    let arrow_w = if value.is_some() { arrow.as_ref().map_or(0, |_| 2) } else { 0 };
-    // Columns reserved to the right of the box: " " + val + " " + unit + [" " + arrow].
-    let val_right_w = 1 + val_str.chars().count() + 1 + unit.chars().count() + arrow_w;
-    // Two columns go to the box borders (│ … │). Floor keeps a usable scope on a
-    // narrow rail; the value is what clips first only at the extreme minimum width.
-    let scope_w = iw.saturating_sub(METRIC_LEAD + 2 + val_right_w).max(4);
+    // Two columns go to the box borders (│ … │); the value column is a fixed budget
+    // so every box is the same width and their right edges line up. Floor keeps a
+    // usable scope on a narrow rail.
+    let scope_w = iw.saturating_sub(METRIC_LEAD + 2 + METRIC_VALUE_W).max(4);
 
     let data: Vec<f32> = history.iter().copied().collect();
     let smoothed = ema_smooth(&data, 0.3);
