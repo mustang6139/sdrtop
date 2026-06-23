@@ -212,10 +212,15 @@ pub fn spawn_rx_task(
                     let pwr = m.signal.channel_power_dbfs;
                     let sat = m.signal.adc_saturation_pct;
                     let nf  = m.waterfall.last_fft.as_ref().map(|f| f.noise_floor);
+                    // IRR from the freshly-written imbalance, via the shared helper
+                    // the Lab IQ panel also uses (so trend and read-out agree).
+                    let irr = crate::signal::image_rejection_db(
+                        m.iq.iq_imbalance_db, m.iq.phase_imbalance_deg) as f32;
                     push(&mut m.signal.snr_history, snr);
                     if pwr.is_finite() { push(&mut m.signal.pwr_history, pwr); }
                     if let Some(nf) = nf { push(&mut m.signal.nf_history, nf); }
                     push(&mut m.signal.sat_history, sat);
+                    push(&mut m.iq.irr_history, irr);
                 }
 
                 // Timing accuracy: fold this window's throughput into the running

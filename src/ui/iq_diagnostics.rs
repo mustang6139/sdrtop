@@ -6,6 +6,7 @@ use ratatui::{
     Frame,
 };
 
+use crate::signal::image_rejection_db;
 use crate::state::SdrMetrics;
 use crate::ui::charts::{gain_bar_colored, null_meter};
 use crate::ui::panel::Panel;
@@ -17,35 +18,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn irr_perfect_balance_is_high() {
-        // α=1, θ=0 → den=0 → clamped to 99.9 dB
-        let irr = image_rejection_db(0.0, 0.0);
-        assert!((irr - 99.9).abs() < 0.01, "got {:.1}", irr);
-    }
-
-    #[test]
-    fn irr_amp_only_0_5db() {
-        // 0.5 dB amplitude imbalance, 0° phase → IRR ≈ 32 dB
-        let irr = image_rejection_db(0.5, 0.0);
-        assert!(irr > 30.0 && irr < 35.0, "expected ~32 dB, got {:.1}", irr);
-    }
-
-    #[test]
-    fn irr_phase_only_2deg() {
-        // 0 dB amplitude, 2° phase imbalance:
-        // α=1, cosθ≈0.99939 → IRR = 10·log10(3.999/0.00122) ≈ 35.2 dB
-        let irr = image_rejection_db(0.0, 2.0);
-        assert!(irr > 34.0 && irr < 37.0, "expected ~35.2 dB, got {:.1}", irr);
-    }
-
-    #[test]
-    fn irr_worsens_with_more_imbalance() {
-        let irr_low  = image_rejection_db(0.5, 1.0);
-        let irr_high = image_rejection_db(3.0, 5.0);
-        assert!(irr_low > irr_high, "more imbalance should give worse IRR");
-    }
-
-    #[test]
     fn dc_spike_typical_values() {
         // dc_mag = 0.005 → spike = 20*log10(0.005) ≈ -46 dBFS
         let s = dc_spike_dbfs(0.005).unwrap();
@@ -55,6 +27,31 @@ mod tests {
     #[test]
     fn dc_spike_zero_is_none() {
         assert!(dc_spike_dbfs(0.0).is_none());
+    }
+
+    #[test]
+    fn spark_minmax_autoscales_to_window() {
+        // A flat-but-high series with a small wiggle still spans the glyph range,
+        // and the reported peak-to-peak is the true window span.
+        let (s, p2p) = spark_minmax(&[56.0, 56.2, 55.8, 56.4, 56.0], 8);
+        assert_eq!(s.chars().count(), 5);
+        assert!(s.contains('\u{2588}'), "max sample → full block: {s}");
+        assert!(s.contains('\u{2581}'), "min sample → low block: {s}");
+        assert!((p2p - 0.6).abs() < 1e-4, "p2p {p2p}");
+    }
+
+    #[test]
+    fn spark_minmax_empty_is_empty() {
+        let (s, p2p) = spark_minmax(&[], 8);
+        assert!(s.is_empty() && p2p == 0.0);
+    }
+
+    #[test]
+    fn spark_minmax_respects_width() {
+        // Only the most recent `width` samples are drawn.
+        let data: Vec<f32> = (0..30).map(|i| i as f32).collect();
+        let (s, _) = spark_minmax(&data, 10);
+        assert_eq!(s.chars().count(), 10);
     }
 }
 
@@ -88,19 +85,24 @@ fn spike_color(spike_dbfs: f64, theme: &crate::Theme) -> Color {
     else                       { theme.status_crit }
 }
 
-/// Image Rejection Ratio from IQ amplitude and phase imbalance.
-///
-/// Exact formula for a direct-conversion quadrature receiver:
-///   IRR = 10·log₁₀( (1 + α² + 2α·cosθ) / (1 + α² − 2α·cosθ) )
-/// where α = linear amplitude ratio, θ = phase error in radians.
-/// Returns 99.9 dB when imbalances are negligible (den ≈ 0 → IRR → ∞).
-fn image_rejection_db(amp_imbalance_db: f32, phase_imbalance_deg: f32) -> f64 {
-    let alpha = 10f64.powf(amp_imbalance_db as f64 / 20.0);
-    let theta = phase_imbalance_deg as f64 * std::f64::consts::PI / 180.0;
-    let num = 1.0 + alpha * alpha + 2.0 * alpha * theta.cos();
-    let den = 1.0 + alpha * alpha - 2.0 * alpha * theta.cos();
-    if den <= 1e-12 { return 99.9; }
-    10.0 * (num / den).log10()
+const SPARK: [&str; 8] = ["\u{2581}", "\u{2582}", "\u{2583}", "\u{2584}",
+                          "\u{2585}", "\u{2586}", "\u{2587}", "\u{2588}"];
+
+/// Block-sparkline of the most recent `width` samples, **auto-scaled to the
+/// window's own min..max** (not 0..max) so a flat-but-jittery trend like IRR
+/// hovering at 56 dB still shows its wiggle. Returns the glyphs and the
+/// peak-to-peak spread of the visible window (for the `±x dB` annotation).
+fn spark_minmax(samples: &[f32], width: usize) -> (String, f64) {
+    if samples.is_empty() || width == 0 { return (String::new(), 0.0); }
+    let start = samples.len().saturating_sub(width);
+    let slice = &samples[start..];
+    let lo = slice.iter().cloned().fold(f32::INFINITY, f32::min);
+    let hi = slice.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let span = (hi - lo).max(1e-6);
+    let s = slice.iter()
+        .map(|&v| SPARK[(((v - lo) / span) * 7.0).round().clamp(0.0, 7.0) as usize])
+        .collect();
+    (s, (hi - lo) as f64)
 }
 
 /// DC spike level in dBFS: how tall the centre-frequency spike is in the spectrum.
@@ -164,16 +166,41 @@ impl Panel for IqDiagnosticsPanel {
         let field_w = iw.saturating_sub(LEAD + 1 + VALUE_W).max(8);
         let track_w = field_w.saturating_sub(2); // null_meter adds 2 arrow columns
 
-        // ├╴ SECTION ╶──── nameplate — the same language as the command rail.
-        let section = |name: &str| {
+        // ├╴ SECTION ╶──── hint — nameplate with a dim right-aligned annotation,
+        // the same instrument language as the command rail.
+        let section = |name: &str, hint: &str| -> Line<'static> {
             let label = name.to_uppercase();
-            let used = label.chars().count() + 5;
-            Line::from(vec![
+            let left = label.chars().count() + 5;
+            let hint_w = if hint.is_empty() { 0 } else { hint.chars().count() + 1 };
+            let dashes = iw.saturating_sub(left + hint_w);
+            let mut spans = vec![
                 Span::styled("├╴ ".to_string(), Style::default().fg(dim)),
                 Span::styled(label, Style::default().fg(theme.label).add_modifier(Modifier::BOLD)),
                 Span::styled(" ╶".to_string(), Style::default().fg(dim)),
-                Span::styled("─".repeat(iw.saturating_sub(used)), Style::default().fg(dim)),
+                Span::styled("─".repeat(dashes), Style::default().fg(dim)),
+            ];
+            if !hint.is_empty() {
+                spans.push(Span::styled(format!(" {hint}"), Style::default().fg(dim)));
+            }
+            Line::from(spans)
+        };
+        // A plain " text ………… value" readout line, value right-aligned to the panel.
+        let readout = |text: &str, val: String, color: Color| -> Line<'static> {
+            let pad = iw.saturating_sub(1 + text.chars().count() + val.chars().count());
+            Line::from(vec![
+                Span::raw(" "),
+                Span::styled(text.to_string(), lbl_st),
+                Span::raw(" ".repeat(pad.max(1))),
+                Span::styled(val, Style::default().fg(color).add_modifier(Modifier::BOLD)),
             ])
+        };
+        // Filled cockpit chip — same pill style as the command-rail mode tabs.
+        // `active` lights it (Step 5 wires DC-block / auto-cal state here).
+        let chip = |label: &str, active: bool| -> Span<'static> {
+            let bg = if active { theme.value_hi } else { theme.border_dim };
+            let mut st = Style::default().bg(bg).fg(Color::Rgb(4, 6, 15));
+            if active { st = st.add_modifier(Modifier::BOLD); }
+            Span::styled(format!(" {label} "), st)
         };
         // " LBL " + bipolar null-meter + "  value"
         let meter_row = |label: &str, value: f64, full_scale: f64, color: Color,
@@ -208,7 +235,7 @@ impl Panel for IqDiagnosticsPanel {
         // --- DC OFFSET ---------------------------------------------------------
         // I / Q offsets are deviations from zero → null-meters; magnitude is a
         // green→red quality bar; the spike is a plain level readout.
-        lines.push(section("DC offset"));
+        lines.push(section("DC offset", "target \u{00b1}0.010"));
         let i_color = offset_color(state.iq.dc_offset_i.abs(), theme);
         let q_color = offset_color(state.iq.dc_offset_q.abs(), theme);
         lines.push(meter_row("I", state.iq.dc_offset_i as f64, 0.05, i_color,
@@ -227,21 +254,16 @@ impl Panel for IqDiagnosticsPanel {
         let spike = dc_spike_dbfs(dc_mag);
         let (spike_str, spike_col) = match spike {
             Some(s) => (format!("{s:.1} dBFS"), spike_color(s, theme)),
-            None    => ("—".to_string(), theme.label),
+            None    => ("\u{2014}".to_string(), theme.label),
         };
-        lines.push(Line::from(vec![
-            Span::raw(" "),
-            Span::styled("SPK", lbl_st),
-            Span::raw("  "),
-            Span::styled(spike_str, Style::default().fg(spike_col)),
-        ]));
+        lines.push(readout("DC spike @ LO", spike_str, spike_col));
 
         lines.push(Line::raw(""));
 
         // --- QUADRATURE --------------------------------------------------------
         // Amplitude / phase imbalance are deviations from balance → null-meters;
         // IRR (higher = better) is a red→green quality bar.
-        lines.push(section("Quadrature"));
+        lines.push(section("Quadrature", "gain \u{00b7} phase balance"));
         let amp_abs = state.iq.iq_imbalance_db.abs();
         lines.push(meter_row("AMP", state.iq.iq_imbalance_db as f64, 4.0,
                              imbalance_color(amp_abs, theme),
@@ -253,33 +275,84 @@ impl Panel for IqDiagnosticsPanel {
                              format!("{:+.2}\u{b0}", state.iq.phase_imbalance_deg)));
         lines.push(Line::raw(""));
 
+        // --- IMAGE REJECTION ---------------------------------------------------
+        lines.push(section("Image rejection", "IRR \u{00b7} higher better"));
         let irr = image_rejection_db(state.iq.iq_imbalance_db, state.iq.phase_imbalance_deg);
         let irr_str = if irr >= 60.0 { "> 60 dB".to_string() } else { format!("{irr:.1} dB") };
         lines.push(bar_row("IRR", irr / 60.0, theme.status_crit, theme.status_ok,
                            irr_color(irr, theme), irr_str));
+        // 60 s trend sparkline, auto-scaled so the IRR jitter is visible even when
+        // it sits high and flat. Annotated with the window's peak-to-peak spread.
+        let irr_hist: Vec<f32> = state.iq.irr_history.iter().copied().collect();
+        let (spark, p2p) = spark_minmax(&irr_hist, field_w);
+        if !spark.is_empty() {
+            let trend_pad = iw.saturating_sub(7 + spark.chars().count() + 12);
+            lines.push(Line::from(vec![
+                Span::raw(" "),
+                Span::styled("trend", lbl_st),
+                Span::raw(" "),
+                Span::styled(spark, Style::default().fg(irr_color(irr, theme))),
+                Span::raw(" ".repeat(trend_pad.max(1))),
+                Span::styled(format!("\u{00b1}{:.1} dB/60s", p2p / 2.0),
+                             Style::default().fg(dim)),
+            ]));
+        }
 
         lines.push(Line::raw(""));
 
-        // --- verdict -----------------------------------------------------------
-        let hint = if amp_abs > 3.0 || phase_abs > 5.0 {
-            "⚠ IQ mismatch — consider calibration"
-        } else if dc_mag > 0.02 {
-            "⚠ high DC offset — DC spike likely"
-        } else if amp_abs > 1.0 || phase_abs > 2.0 {
-            "minor imbalance — acceptable"
-        } else {
-            "✓ IQ quality OK"
+        // --- VERDICT BLOCK -----------------------------------------------------
+        // Most-severe issue gets a titled, plain-language explanation; the healthy
+        // dimension gets its own ✓ line; the chips + foot show the actionable state
+        // (Step 5 makes DC-block / auto-cal live).
+        let quad_bad = amp_abs > 3.0 || phase_abs > 5.0;
+        let dc_bad   = dc_mag > 0.02;
+        let minor    = amp_abs > 1.0 || phase_abs > 2.0;
+        let irr_txt  = if irr >= 60.0 { "> 60".to_string() } else { format!("{irr:.0}") };
+        let spk_txt  = spike.map(|s| format!("{s:.1}")).unwrap_or_else(|| "\u{2014}".into());
+
+        let push_title = |lines: &mut Vec<Line<'static>>, mark: &str, text: &str, col: Color| {
+            lines.push(Line::from(vec![
+                Span::raw(" "),
+                Span::styled(format!("{mark} {text}"),
+                             Style::default().fg(col).add_modifier(Modifier::BOLD)),
+            ]));
         };
-        let hint_color = if amp_abs > 3.0 || phase_abs > 5.0 {
-            theme.status_crit
-        } else if dc_mag as f32 > 0.02 || amp_abs > 1.0 || phase_abs > 2.0 {
-            theme.status_warn
-        } else {
-            theme.status_ok
+        let push_body = |lines: &mut Vec<Line<'static>>, text: String| {
+            lines.push(Line::from(vec![Span::raw(" "), Span::styled(text, lbl_st)]));
         };
+        let push_ok = |lines: &mut Vec<Line<'static>>, text: String| {
+            lines.push(Line::from(vec![
+                Span::raw(" "),
+                Span::styled(text, Style::default().fg(theme.status_ok)),
+            ]));
+        };
+
+        if quad_bad {
+            push_title(&mut lines, "\u{26a0}", "QUADRATURE IMBALANCE", theme.status_crit);
+            push_body(&mut lines, format!("I/Q off balance \u{2192} image only \u{2212}{irr_txt} dB."));
+            push_body(&mut lines, "Run auto-cal to correct quadrature.".into());
+        } else if dc_bad {
+            push_title(&mut lines, "\u{26a0}", "DC OFFSET HIGH", theme.status_warn);
+            push_body(&mut lines, format!("I/Q centroid off-zero \u{2192} DC spike {spk_txt} dBFS at LO."));
+            push_ok(&mut lines, format!("\u{2713} quadrature balanced \u{00b7} image \u{2212}{irr_txt} dB"));
+        } else if minor {
+            push_title(&mut lines, "\u{00b7}", "MINOR IMBALANCE", theme.status_warn);
+            push_body(&mut lines, "Within tolerance \u{2014} watch the image level.".into());
+        } else {
+            push_title(&mut lines, "\u{2713}", "IQ QUALITY OK", theme.status_ok);
+            push_body(&mut lines, format!("Quadrature balanced \u{00b7} image \u{2212}{irr_txt} dB \u{00b7} DC centred."));
+        }
+
+        // Action chips (static off/idle until Step 5 wires the DSP) + status foot.
         lines.push(Line::from(vec![
             Span::raw(" "),
-            Span::styled(hint, Style::default().fg(hint_color)),
+            chip("D DC-block", false),
+            Span::raw(" "),
+            chip("C auto-cal", false),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw(" "),
+            Span::styled("DC-block OFF \u{00b7} auto-cal idle", Style::default().fg(dim)),
         ]));
 
         // Self-adjusting density: drop the airy spacers if the panel is too short to

@@ -14,6 +14,10 @@ pub struct IqState {
     pub buf_fill_pct:        f32,
     pub buf_fill_history:    std::collections::VecDeque<u64>,
     pub phase_imbalance_deg: f32,
+    /// IRR (image-rejection ratio, dB) trend history for the Lab IQ diagnostics
+    /// sparkline. Sampled at the same ~500 ms cadence and [`SNR_HISTORY_LEN`] depth
+    /// as the command-rail SIGNAL traces so a full panel-width sweep ≈ 60 s.
+    pub irr_history:         std::collections::VecDeque<f32>,
     /// Decimated I/Q sample ring buffer for the 2-D constellation display.
     /// Values are normalised to [-1, 1] (divided by 128). Written in the RX
     /// hot-path at a 1 : [`CONST_DECIMATE`] decimation; oldest pairs are

@@ -152,7 +152,7 @@ impl App {
                 sat_history: std::collections::VecDeque::with_capacity(crate::state::SNR_HISTORY_LEN),
                 last_clip_at: None,
             },
-            iq: IqState { iq_imbalance_db: 0.0, dc_offset_i: 0.0, dc_offset_q: 0.0, cb_period_us: 0, cb_jitter_us: 0, jitter_history: std::collections::VecDeque::with_capacity(THROUGHPUT_HISTORY_LEN), iq_amplitude_hist: [0u64; 32], buf_fill_pct: 0.0, buf_fill_history: std::collections::VecDeque::with_capacity(THROUGHPUT_HISTORY_LEN), phase_imbalance_deg: 0.0, constellation: std::collections::VecDeque::new() },
+            iq: IqState { iq_imbalance_db: 0.0, dc_offset_i: 0.0, dc_offset_q: 0.0, cb_period_us: 0, cb_jitter_us: 0, jitter_history: std::collections::VecDeque::with_capacity(THROUGHPUT_HISTORY_LEN), iq_amplitude_hist: [0u64; 32], buf_fill_pct: 0.0, buf_fill_history: std::collections::VecDeque::with_capacity(THROUGHPUT_HISTORY_LEN), phase_imbalance_deg: 0.0, irr_history: std::collections::VecDeque::with_capacity(crate::state::SNR_HISTORY_LEN), constellation: std::collections::VecDeque::new() },
             observer: ObserverState::default(),
             spectrum: SpectrumState {
                 step_hz: 100_000, y_min: -120.0, y_max: 0.0,
@@ -276,7 +276,7 @@ impl App {
                 sat_history: std::collections::VecDeque::with_capacity(crate::state::SNR_HISTORY_LEN),
                 last_clip_at: None,
             },
-            iq: IqState { iq_imbalance_db: 0.0, dc_offset_i: 0.0, dc_offset_q: 0.0, cb_period_us: 0, cb_jitter_us: 0, jitter_history: std::collections::VecDeque::with_capacity(THROUGHPUT_HISTORY_LEN), iq_amplitude_hist: [0u64; 32], buf_fill_pct: 0.0, buf_fill_history: std::collections::VecDeque::with_capacity(THROUGHPUT_HISTORY_LEN), phase_imbalance_deg: 0.0, constellation: std::collections::VecDeque::new() },
+            iq: IqState { iq_imbalance_db: 0.0, dc_offset_i: 0.0, dc_offset_q: 0.0, cb_period_us: 0, cb_jitter_us: 0, jitter_history: std::collections::VecDeque::with_capacity(THROUGHPUT_HISTORY_LEN), iq_amplitude_hist: [0u64; 32], buf_fill_pct: 0.0, buf_fill_history: std::collections::VecDeque::with_capacity(THROUGHPUT_HISTORY_LEN), phase_imbalance_deg: 0.0, irr_history: std::collections::VecDeque::with_capacity(crate::state::SNR_HISTORY_LEN), constellation: std::collections::VecDeque::new() },
             observer: ObserverState {
                 active: true,
                 device: Some(format!("{} · {}", sysinfo.product, sysinfo.manufacturer)),
