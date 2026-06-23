@@ -9,7 +9,7 @@
 use std::f64::consts::PI;
 
 use ratatui::{
-    layout::Rect,
+    layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
@@ -102,6 +102,77 @@ fn fit_ellipse(coords: &[(f64, f64)]) -> Option<(f64, f64, f64, f64, f64)> {
     let b = (2.0 * l2).sqrt();
     let theta = 0.5 * (2.0 * cxy).atan2(cxx - cyy);
     Some((mx, my, a, b, theta))
+}
+
+/// Scalar quality read-outs derived from the cloud, for the corner stats box.
+/// `evm_*` / `mer_db` / `ecc` / `tilt_deg` are `None` until there are enough
+/// points for a stable ellipse fit.
+struct CloudStats {
+    n:        usize,
+    cx:       f64,
+    cy:       f64,
+    sigma:    f64,
+    evm_rms:  Option<f64>,
+    evm_pk:   Option<f64>,
+    mer_db:   Option<f64>,
+    ecc:      Option<f64>,
+    tilt_deg: Option<f64>,
+}
+
+/// Derive the corner stats from the cloud and its fitted ellipse.
+///
+/// `sigma` is the radial spread (std of point radius about the centroid).
+/// `evm_*` is a **scatter-derived proxy**, not symbol-referenced EVM: each point's
+/// normalised radius `ρ = sqrt((u/a)² + (v/b)²)` in the fitted-ellipse frame is `1`
+/// on the ellipse, so `ρ−1` measures how tightly the cloud hugs its own fitted ring
+/// (amplitude/phase imbalance is captured separately by `ecc`/`tilt`, not here).
+/// `mer_db = −20·log10(EVM_rms)`.
+fn cloud_stats(coords: &[(f64, f64)], ellipse: Option<(f64, f64, f64, f64, f64)>) -> CloudStats {
+    let n  = coords.len();
+    let nf = n.max(1) as f64;
+    let (mut sx, mut sy) = (0.0, 0.0);
+    for &(x, y) in coords { sx += x; sy += y; }
+    let (cx, cy) = (sx / nf, sy / nf);
+
+    let (mut sr, mut sr2) = (0.0, 0.0);
+    for &(x, y) in coords {
+        let r = (x - cx).hypot(y - cy);
+        sr += r; sr2 += r * r;
+    }
+    let mean_r = sr / nf;
+    let sigma  = (sr2 / nf - mean_r * mean_r).max(0.0).sqrt();
+
+    let mut s = CloudStats {
+        n, cx, cy, sigma,
+        evm_rms: None, evm_pk: None, mer_db: None, ecc: None, tilt_deg: None,
+    };
+
+    if let Some((ex, ey, a, b, th)) = ellipse {
+        if a > 1e-9 && b > 1e-9 {
+            let (ct, st) = (th.cos(), th.sin());
+            let (mut acc, mut pk) = (0.0, 0.0f64);
+            for &(x, y) in coords {
+                let (dx, dy) = (x - ex, y - ey);
+                let u =  dx * ct + dy * st;   // rotate into the ellipse's own frame
+                let v = -dx * st + dy * ct;
+                let rho = ((u / a).powi(2) + (v / b).powi(2)).sqrt();
+                let dev = rho - 1.0;
+                acc += dev * dev;
+                pk = pk.max(dev.abs());
+            }
+            let evm_rms = (acc / nf).sqrt();
+            let mer = if evm_rms > 1e-6 { -20.0 * evm_rms.log10() } else { 60.0 };
+            s.evm_rms = Some(evm_rms);
+            s.evm_pk  = Some(pk);
+            s.mer_db  = Some(mer.min(60.0));
+            s.ecc     = Some(a / b.max(1e-9));
+            let mut tilt = th.to_degrees();
+            while tilt >   90.0 { tilt -= 180.0; }
+            while tilt <= -90.0 { tilt += 180.0; }
+            s.tilt_deg = Some(tilt);
+        }
+    }
+    s
 }
 
 impl Panel for IqConstellationPanel {
@@ -228,6 +299,95 @@ impl Panel for IqConstellationPanel {
                 }),
             inner,
         );
+
+        // --- corner stats overlay (drawn over the canvas) ----------------------
+        // A vector-analyser read-out: EVM/MER/σ/n + fit in the top-right, the
+        // density legend bottom-left, the measured centroid bottom-right. Text
+        // cells overwrite the cloud underneath, so each box stays legible.
+        let stats   = cloud_stats(&coords, ellipse);
+        let lab     = theme.label;
+        let lab_dim = theme.border_dim;
+        let val     = theme.value_hi;
+        let bold    = Style::default().fg(val).add_modifier(Modifier::BOLD);
+        let dimst   = Style::default().fg(lab_dim);
+        let labst   = Style::default().fg(lab);
+
+        if inner.width >= 26 && inner.height >= 8 {
+            let mut sl: Vec<Line> = Vec::new();
+            if let (Some(r), Some(p)) = (stats.evm_rms, stats.evm_pk) {
+                sl.push(Line::from(vec![
+                    Span::styled("EVM ", labst),
+                    Span::styled(format!("{:.1}% ", r * 100.0), bold),
+                    Span::styled("rms · ", dimst),
+                    Span::styled(format!("{:.0}% ", p * 100.0), Style::default().fg(val)),
+                    Span::styled("pk", dimst),
+                ]));
+            }
+            if let Some(m) = stats.mer_db {
+                sl.push(Line::from(vec![
+                    Span::styled("MER ", labst),
+                    Span::styled(format!("{m:.1} dB"), bold),
+                ]));
+            }
+            sl.push(Line::from(vec![
+                Span::styled("σ ", labst),
+                Span::styled(format!("{:.2}", stats.sigma), Style::default().fg(val)),
+                Span::styled(" · n ", dimst),
+                Span::styled(format!("{}", stats.n), Style::default().fg(val)),
+            ]));
+            if let (Some(e), Some(t)) = (stats.ecc, stats.tilt_deg) {
+                sl.push(Line::from(vec![
+                    Span::styled("fit ecc ", dimst),
+                    Span::styled(format!("{e:.3}"), Style::default().fg(val)),
+                    Span::styled(" · tilt ", dimst),
+                    Span::styled(format!("{t:+.1}\u{b0}"), Style::default().fg(val)),
+                ]));
+            }
+            let w = 24u16.min(inner.width);
+            let h = (sl.len() as u16).min(inner.height);
+            let rect = Rect { x: inner.x + inner.width - w, y: inner.y, width: w, height: h };
+            f.render_widget(Paragraph::new(sl).alignment(Alignment::Right), rect);
+        }
+
+        if inner.width >= 24 && inner.height >= 6 {
+            // density legend, bottom-left
+            let leg = vec![
+                Line::from(vec![
+                    Span::styled("\u{28ff} ", Style::default().fg(HEAT[HEAT_LEVELS - 1])),
+                    Span::styled("dense  ", dimst),
+                    Span::styled("\u{2802} ", Style::default().fg(HEAT[0])),
+                    Span::styled("sparse", dimst),
+                ]),
+                Line::from(vec![
+                    Span::styled("\u{25ef} ", Style::default().fg(ellipse_color)),
+                    Span::styled("rms fit  ", dimst),
+                    Span::styled("\u{2295} ", Style::default().fg(dc_color)),
+                    Span::styled("centroid", dimst),
+                ]),
+            ];
+            let rect = Rect {
+                x: inner.x, y: inner.y + inner.height - 2,
+                width: inner.width / 2, height: 2,
+            };
+            f.render_widget(Paragraph::new(leg), rect);
+
+            // measured centroid, bottom-right
+            let cen = vec![
+                Line::from(vec![
+                    Span::styled("\u{2295} ", Style::default().fg(dc_color)),
+                    Span::styled("centroid", dimst),
+                ]),
+                Line::from(Span::styled(
+                    format!("I {:+.4} \u{b7} Q {:+.4}", stats.cx, stats.cy), labst,
+                )),
+            ];
+            let w = 22u16.min(inner.width / 2);
+            let rect = Rect {
+                x: inner.x + inner.width - w, y: inner.y + inner.height - 2,
+                width: w, height: 2,
+            };
+            f.render_widget(Paragraph::new(cen).alignment(Alignment::Right), rect);
+        }
     }
 }
 
@@ -287,6 +447,46 @@ mod tests {
         assert_eq!(layers.len(), HEAT_LEVELS);
         let total: usize = layers.iter().map(|l| l.len()).sum();
         assert_eq!(total, coords.len(), "every point lands in exactly one layer");
+    }
+
+    #[test]
+    fn cloud_stats_balanced_ring_is_tight_and_round() {
+        let coords = ring(256, 0.5, 0.5);
+        let s = cloud_stats(&coords, fit_ellipse(&coords));
+        assert_eq!(s.n, 256);
+        // Points lie exactly on the fitted ring → near-zero EVM, high MER.
+        assert!(s.evm_rms.unwrap() < 0.02, "evm {:?}", s.evm_rms);
+        assert!(s.mer_db.unwrap() > 30.0, "mer {:?}", s.mer_db);
+        assert!((s.ecc.unwrap() - 1.0).abs() < 0.05, "ecc {:?}", s.ecc);
+        // Centroid of a centred ring is ~origin.
+        assert!(s.cx.abs() < 1e-3 && s.cy.abs() < 1e-3);
+    }
+
+    #[test]
+    fn cloud_stats_amplitude_imbalance_does_not_inflate_evm() {
+        // A clean 2:1 elliptical ring: ecc≈2 but EVM stays low because the fit
+        // captures the ellipse (imbalance is reported by ecc, not EVM).
+        let coords = ring(256, 1.0, 0.5);
+        let s = cloud_stats(&coords, fit_ellipse(&coords));
+        assert!(s.evm_rms.unwrap() < 0.03, "evm {:?}", s.evm_rms);
+        assert!((s.ecc.unwrap() - 2.0).abs() < 0.15, "ecc {:?}", s.ecc);
+    }
+
+    #[test]
+    fn cloud_stats_scatter_raises_evm() {
+        // Two concentric rings can't both lie on one ellipse → real radial scatter.
+        let mut coords = ring(128, 0.4, 0.4);
+        coords.extend(ring(128, 0.6, 0.6));
+        let s = cloud_stats(&coords, fit_ellipse(&coords));
+        assert!(s.evm_rms.unwrap() > 0.1, "expected scatter, evm {:?}", s.evm_rms);
+        assert!(s.mer_db.unwrap() < 25.0, "mer {:?}", s.mer_db);
+    }
+
+    #[test]
+    fn cloud_stats_too_few_points_has_no_evm() {
+        let s = cloud_stats(&ring(8, 0.5, 0.5), None);
+        assert!(s.evm_rms.is_none() && s.mer_db.is_none() && s.ecc.is_none());
+        assert_eq!(s.n, 8);
     }
 
     #[test]
