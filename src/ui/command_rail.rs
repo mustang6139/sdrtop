@@ -684,19 +684,24 @@ impl Panel for CommandRailPanel {
             trend_arrow(series_delta(&state.signal.sat_history), 0.5, Some(false), theme),
             iw, theme));
         // Alert-memory: a recent clip leaves a fading "⚠ last clip Xs" line under
-        // SAT — 256-step bg tint decays from dark red to nothing, never flickers.
+        // SAT (bg tint decays from dark red to nothing, never flickers). It occupies
+        // the SAT section's trailing spacer row rather than adding a line, so showing
+        // it leaves the total line count — and thus the airy/dense decision below —
+        // unchanged: the layout no longer collapses its spacers when a clip appears.
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs()).unwrap_or(0);
-        if let Some((since, fresh)) = clip_alert(state.signal.last_clip_at, now) {
-            let fg_col = if fresh { theme.status_crit } else { theme.stale };
-            let mut style = Style::default().fg(fg_col);
-            if let Some(bg) = clip_decay_bg(since) { style = style.bg(bg); }
-            lines.push(Line::from(vec![
-                Span::raw(" "),
-                Span::styled(format!("⚠ last clip {}", fmt_since(since)), style),
-            ]));
+        match clip_alert(state.signal.last_clip_at, now) {
+            Some((since, fresh)) => {
+                let fg_col = if fresh { theme.status_crit } else { theme.stale };
+                let mut style = Style::default().fg(fg_col);
+                if let Some(bg) = clip_decay_bg(since) { style = style.bg(bg); }
+                lines.push(Line::from(vec![
+                    Span::raw(" "),
+                    Span::styled(format!("⚠ last clip {}", fmt_since(since)), style),
+                ]));
+            }
+            None => lines.push(Line::raw("")),
         }
-        lines.push(Line::raw(""));
 
         // --- GAIN --------------------------------------------------------------
         lines.push(section("Gain"));
