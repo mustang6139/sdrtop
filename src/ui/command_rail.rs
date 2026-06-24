@@ -219,6 +219,10 @@ fn s_bar_char(x: usize, fill_eighths: usize, peak_col: Option<usize>) -> char {
     }
 }
 
+// Positions are kept in the readable "n fourteenths" form to mirror the S-unit
+// scale; the final 14.0/14.0 (= 1.0, the bar's max) trips clippy's eq_op, hence
+// the allow — the pattern documents intent better than a bare 1.0 would.
+#[allow(clippy::eq_op)]
 const SCALE: &[(&str, f64)] = &[
     ("S1", 0.0 / 14.0), ("S3", 2.0 / 14.0), ("S5", 4.0 / 14.0), ("S7", 6.0 / 14.0),
     ("S9", 8.0 / 14.0), ("+20", 10.0 / 14.0), ("+40", 12.0 / 14.0), ("+60", 14.0 / 14.0),
