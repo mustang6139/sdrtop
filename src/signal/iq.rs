@@ -29,9 +29,43 @@ pub fn iq_correction_coeffs(var_i: f64, var_q: f64, cov_iq: f64) -> (f32, f32) {
     ((-b * cov_iq / var_i) as f32, b as f32)
 }
 
+/// Second moments after the Q-row correction `q' = c_qi·i + c_qq·q` is applied to
+/// DC-removed samples (I passes through). Lets the RX task report the **residual**
+/// imbalance the corrected stream actually has — without a second per-sample
+/// accumulator — so the diagnostics agree with the corrected scope/constellation.
+/// Returns `(var_i', var_q', cov_iq')`.
+pub fn corrected_moments(var_i: f64, var_q: f64, cov_iq: f64, c_qi: f64, c_qq: f64)
+    -> (f64, f64, f64)
+{
+    let var_q2 = c_qi * c_qi * var_i + c_qq * c_qq * var_q + 2.0 * c_qi * c_qq * cov_iq;
+    let cov2   = c_qi * var_i + c_qq * cov_iq;
+    (var_i, var_q2.max(0.0), cov2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn corrected_moments_zeroes_residual_for_its_own_coeffs() {
+        // Imbalanced + correlated input → derive its coeffs → applying them must
+        // leave Q decorrelated from I (cov'≈0) and power-matched (var_i'≈var_q').
+        let (var_i, var_q, cov) = (1.0, 0.36, 0.18);
+        let (c_qi, c_qq) = iq_correction_coeffs(var_i, var_q, cov);
+        let (vi, vq, cv) = corrected_moments(var_i, var_q, cov, c_qi as f64, c_qq as f64);
+        assert!(cv.abs() < 1e-5, "cov should cancel, got {cv}");
+        assert!((vi - vq).abs() < 1e-5, "power should match, got {vi} vs {vq}");
+        // → corrected IRR is effectively perfect.
+        let amp = 10.0 * (vi / vq).log10();
+        let phase = (2.0 * cv / (vi + vq)).asin().to_degrees();
+        assert!(image_rejection_db(amp as f32, phase as f32) > 80.0);
+    }
+
+    #[test]
+    fn corrected_moments_identity_is_passthrough() {
+        let (vi, vq, cv) = corrected_moments(1.0, 0.5, 0.1, 0.0, 1.0);
+        assert!((vi - 1.0).abs() < 1e-12 && (vq - 0.5).abs() < 1e-12 && (cv - 0.1).abs() < 1e-12);
+    }
 
     #[test]
     fn coeffs_balanced_is_identity() {

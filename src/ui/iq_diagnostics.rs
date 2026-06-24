@@ -309,10 +309,10 @@ impl Panel for IqDiagnosticsPanel {
         lines.push(Line::raw(""));
 
         // --- VERDICT BLOCK -----------------------------------------------------
-        // Most-severe issue gets a titled, plain-language explanation; the healthy
-        // dimension gets its own ✓ line. Metrics are measured on the raw stream, so
-        // when a correction is active the verdict says it's being compensated rather
-        // than telling you to do what's already done.
+        // Most-severe issue gets a titled, plain-language explanation. Metrics are the
+        // RESIDUAL after any active correction, so a lit chip + a still-bad reading
+        // means the correction is not keeping up (re-run it); a clean reading with
+        // corrections active gets a "corrections active" ✓ instead.
         let cal = &state.iq.cal;
         let quad_bad = amp_abs > 3.0 || phase_abs > 5.0;
         let dc_bad   = dc_mag > 0.02;
@@ -341,7 +341,7 @@ impl Panel for IqDiagnosticsPanel {
             push_title(&mut lines, "\u{26a0}", "QUADRATURE IMBALANCE", theme.status_crit);
             push_body(&mut lines, format!("I/Q off balance \u{2192} image only \u{2212}{irr_txt} dB."));
             if cal.cal_applied {
-                push_ok(&mut lines, "\u{2713} auto-cal active \u{00b7} compensated downstream".into());
+                push_body(&mut lines, "Auto-cal on but residual remains \u{2014} re-run [C].".into());
             } else {
                 push_body(&mut lines, "Run auto-cal [C] to correct quadrature.".into());
             }
@@ -349,7 +349,7 @@ impl Panel for IqDiagnosticsPanel {
             push_title(&mut lines, "\u{26a0}", "DC OFFSET HIGH", theme.status_warn);
             push_body(&mut lines, format!("I/Q centroid off-zero \u{2192} DC spike {spk_txt} dBFS at LO."));
             if cal.dc_block_on {
-                push_ok(&mut lines, "\u{2713} DC-block active \u{00b7} spike removed downstream".into());
+                push_body(&mut lines, "DC-block on but residual offset remains.".into());
             } else {
                 push_body(&mut lines, "Press [D] to block the DC spike.".into());
             }
@@ -358,7 +358,11 @@ impl Panel for IqDiagnosticsPanel {
             push_body(&mut lines, "Within tolerance \u{2014} watch the image level.".into());
         } else {
             push_title(&mut lines, "\u{2713}", "IQ QUALITY OK", theme.status_ok);
-            push_body(&mut lines, format!("Quadrature balanced \u{00b7} image \u{2212}{irr_txt} dB \u{00b7} DC centred."));
+            if cal.cal_applied || cal.dc_block_on {
+                push_ok(&mut lines, format!("Corrections active \u{00b7} image \u{2212}{irr_txt} dB \u{00b7} DC centred."));
+            } else {
+                push_body(&mut lines, format!("Quadrature balanced \u{00b7} image \u{2212}{irr_txt} dB \u{00b7} DC centred."));
+            }
         }
 
         // Action chips lit by the live correction state + a status foot. Full labels

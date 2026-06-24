@@ -239,25 +239,35 @@ impl Panel for ImageScopePanel {
         let rel = r.image_dbfs - r.carrier_dbfs;
         let rel_str = if rel <= 0.0 { format!("\u{2212}{:.1} dB", -rel) }
                       else          { format!("+{rel:.1} dB") };
+        // Width-aware readouts: the frequency/level is essential, the parenthetical
+        // ("(mirror)", "(I/Q offset)") is decoration. On a narrow scope (the 32% slot
+        // is often < 33 cols of inner width) drop the trailing decoration rather than
+        // clipping a level mid-word. Each line keeps its first three spans.
+        let line_w = |spans: &[Span]| spans.iter().map(|s| s.content.chars().count()).sum::<usize>();
+        let fit = |mut spans: Vec<Span<'static>>| -> Line<'static> {
+            while spans.len() > 3 && line_w(&spans) > iw { spans.pop(); }
+            Line::from(spans)
+        };
         let readouts: Vec<Line> = vec![
-            Line::from(vec![
+            fit(vec![
                 Span::styled(" \u{25bc} ", Style::default().fg(car_col)),
                 Span::styled("CARRIER ", lbl),
-                Span::styled(format!("{:.3} MHz ", carrier_f / 1e6),
+                Span::styled(format!("{:.3} MHz", carrier_f / 1e6),
                              Style::default().fg(car_col).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("\u{00b7} {:.1} dBFS", r.carrier_dbfs), Style::default().fg(dimc)),
+                Span::styled(format!(" \u{00b7} {:.1} dBFS", r.carrier_dbfs), Style::default().fg(dimc)),
             ]),
-            Line::from(vec![
+            fit(vec![
                 Span::styled(" \u{25bc} ", Style::default().fg(img_col)),
-                Span::styled("IMAGE (mirror) ", lbl),
+                Span::styled("IMAGE ", lbl),
                 Span::styled(format!("\u{00b7} {:.1} dBFS", r.image_dbfs),
                              Style::default().fg(img_col)),
+                Span::styled(" (mirror)", lbl),
             ]),
-            Line::from(vec![
+            fit(vec![
                 Span::styled(" \u{25ae} ", Style::default().fg(dc_col_c)),
                 Span::styled("DC spike ", lbl),
-                Span::styled(format!("\u{00b7} {:.1} dBFS ", r.dc_dbfs), Style::default().fg(dc_col_c)),
-                Span::styled("(I/Q offset)", Style::default().fg(dimc)),
+                Span::styled(format!("\u{00b7} {:.1} dBFS", r.dc_dbfs), Style::default().fg(dc_col_c)),
+                Span::styled(" (I/Q offset)", Style::default().fg(dimc)),
             ]),
             Line::from(vec![
                 Span::raw(" "),

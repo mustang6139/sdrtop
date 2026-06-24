@@ -42,7 +42,8 @@ pub fn spawn_rx_task(
             // Lock block 1: snapshot + reset accumulators, do integer computations.
             // Floating-point transcendentals (sqrt, log10, asin) run outside the lock.
             let (acc_i_sum, acc_q_sum, acc_i_sq_sum, acc_q_sq_sum,
-                 acc_cross_sum, acc_samples, acc_jitter_sum, acc_jitter_sq, acc_jitter_cnt) = {
+                 acc_cross_sum, acc_samples, acc_jitter_sum, acc_jitter_sq, acc_jitter_cnt,
+                 cal_snap) = {
                 let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
                 let elapsed_ms = now.duration_since(m.radio.last_poll_time).as_millis() as u64;
                 let bytes = m.radio.bytes_since_last_poll;
@@ -131,8 +132,14 @@ pub fn spawn_rx_task(
                 }
                 m.iq.buf_fill_history.push_back(buf_sample);
 
+                // Snapshot the live correction state so the displayed impairment can
+                // be reported as the residual AFTER correction (agreeing with the
+                // corrected scope/constellation), not the raw hardware figure.
+                let cal_snap = m.iq.cal;
+
                 (acc_i_sum, acc_q_sum, acc_i_sq_sum, acc_q_sq_sum,
-                 acc_cross_sum, acc_samples, acc_jitter_sum, acc_jitter_sq, acc_jitter_cnt)
+                 acc_cross_sum, acc_samples, acc_jitter_sum, acc_jitter_sq, acc_jitter_cnt,
+                 cal_snap)
             };
 
             // Floating-point IQ and jitter metrics — computed outside the lock.
@@ -152,20 +159,38 @@ pub fn spawn_rx_task(
                 let mean_q = acc_q_sum as f64 / n;
                 let var_i  = (acc_i_sq_sum as f64 / n - mean_i * mean_i).max(0.0);
                 let var_q  = (acc_q_sq_sum as f64 / n - mean_q * mean_q).max(0.0);
-                dc_i = (mean_i / 128.0) as f32;
-                dc_q = (mean_q / 128.0) as f32;
+                let cov_iq = acc_cross_sum as f64 / n - mean_i * mean_q;
+
+                // Candidate auto-cal coefficients + DC to subtract are always derived
+                // from the RAW moments — that is what [C]/[D] capture and apply.
+                iq_corr  = crate::signal::iq_correction_coeffs(var_i, var_q, cov_iq);
                 dc_i_raw = mean_i as f32;
                 dc_q_raw = mean_q as f32;
-                let i_ac = var_i.sqrt();
-                let q_ac = var_q.sqrt();
+
+                // Displayed impairment is the RESIDUAL after the active correction:
+                // transform the moments by the applied Q-row when calibrated, and
+                // subtract the blocked DC. With no correction these are the raw values.
+                let (ev_i, ev_q, ecov) = if cal_snap.cal_applied {
+                    crate::signal::corrected_moments(
+                        var_i, var_q, cov_iq, cal_snap.c_qi as f64, cal_snap.c_qq as f64)
+                } else {
+                    (var_i, var_q, cov_iq)
+                };
+                let (emean_i, emean_q) = if cal_snap.dc_block_on || cal_snap.cal_applied {
+                    (mean_i - cal_snap.dc_i_raw as f64, mean_q - cal_snap.dc_q_raw as f64)
+                } else {
+                    (mean_i, mean_q)
+                };
+                dc_i = (emean_i / 128.0) as f32;
+                dc_q = (emean_q / 128.0) as f32;
+                let i_ac = ev_i.sqrt();
+                let q_ac = ev_q.sqrt();
                 iq_imbalance_db = if q_ac > 0.0 {
                     Some((20.0 * (i_ac / q_ac).log10()) as f32)
                 } else { None };
-                let cov_iq = acc_cross_sum as f64 / n - mean_i * mean_q;
-                iq_corr = crate::signal::iq_correction_coeffs(var_i, var_q, cov_iq);
-                let denom  = var_i + var_q;
+                let denom = ev_i + ev_q;
                 phase_imbalance = if denom > 0.0 {
-                    let sin_theta = (2.0 * cov_iq / denom).clamp(-1.0, 1.0);
+                    let sin_theta = (2.0 * ecov / denom).clamp(-1.0, 1.0);
                     Some((sin_theta.asin() * 180.0 / std::f64::consts::PI) as f32)
                 } else { None };
             } else {

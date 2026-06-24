@@ -3,4 +3,4 @@ pub mod fft;
 pub mod iq;
 
 pub use fft::FftWorker;
-pub use iq::{image_rejection_db, iq_correction_coeffs};
+pub use iq::{corrected_moments, image_rejection_db, iq_correction_coeffs};
