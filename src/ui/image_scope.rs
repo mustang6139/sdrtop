@@ -170,9 +170,11 @@ impl Panel for ImageScopePanel {
             title_spans.push(Span::styled(" [STALE]", Style::default().fg(theme.stale)));
         }
         title_spans.push(Span::raw(" "));
+        // Match the other Lab IQ panels (border_default is the documented colour for
+        // iq_* panels) so the [5] bench reads as one unit, not a spectrum offcut.
         let border_color = if focused { theme.border_focused }
             else if stale { theme.stale }
-            else { theme.border_accent };
+            else { theme.border_default };
         let block = Block::default()
             .title(Line::from(title_spans))
             .borders(Borders::ALL)

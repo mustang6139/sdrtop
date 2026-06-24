@@ -286,17 +286,23 @@ impl Panel for IqDiagnosticsPanel {
         // 60 s trend sparkline, auto-scaled so the IRR jitter is visible even when
         // it sits high and flat. Annotated with the window's peak-to-peak spread.
         let irr_hist: Vec<f32> = state.iq.irr_history.iter().copied().collect();
-        let (spark, p2p) = spark_minmax(&irr_hist, field_w);
+        // Size the sparkline to leave room for the " trend " prefix (7) and the
+        // "±x.x dB/60s" annotation, so the whole row fits in iw (the bars reserve
+        // their own value column; the trend's annotation is wider, so it can't reuse
+        // field_w or it overruns the right edge).
+        const TREND_ANN_W: usize = 13;   // budget for "±NN.N dB/60s"
+        let spark_w = iw.saturating_sub(7 + 1 + TREND_ANN_W).max(1);
+        let (spark, p2p) = spark_minmax(&irr_hist, spark_w);
         if !spark.is_empty() {
-            let trend_pad = iw.saturating_sub(7 + spark.chars().count() + 12);
+            let ann = format!("\u{00b1}{:.1} dB/60s", p2p / 2.0);
+            let trend_pad = iw.saturating_sub(7 + spark.chars().count() + ann.chars().count());
             lines.push(Line::from(vec![
                 Span::raw(" "),
                 Span::styled("trend", lbl_st),
                 Span::raw(" "),
                 Span::styled(spark, Style::default().fg(irr_color(irr, theme))),
                 Span::raw(" ".repeat(trend_pad.max(1))),
-                Span::styled(format!("\u{00b1}{:.1} dB/60s", p2p / 2.0),
-                             Style::default().fg(dim)),
+                Span::styled(ann, Style::default().fg(dim)),
             ]));
         }
 
@@ -355,14 +361,21 @@ impl Panel for IqDiagnosticsPanel {
             push_body(&mut lines, format!("Quadrature balanced \u{00b7} image \u{2212}{irr_txt} dB \u{00b7} DC centred."));
         }
 
-        // Action chips lit by the live correction state + a status foot.
+        // Action chips lit by the live correction state + a status foot. Full labels
+        // span ~37 cols; on a narrow lab pane fall back to single-letter chips so the
+        // freeze chip isn't clipped off the right edge.
+        let (d_lbl, c_lbl, f_lbl) = if iw >= 37 {
+            ("D DC-block", "C auto-cal", "F freeze")
+        } else {
+            ("D", "C", "F")
+        };
         lines.push(Line::from(vec![
             Span::raw(" "),
-            chip("D DC-block", cal.dc_block_on),
+            chip(d_lbl, cal.dc_block_on),
             Span::raw(" "),
-            chip("C auto-cal", cal.cal_applied),
+            chip(c_lbl, cal.cal_applied),
             Span::raw(" "),
-            chip("F freeze", cal.frozen),
+            chip(f_lbl, cal.frozen),
         ]));
         let dc_txt  = if cal.dc_block_on { "DC-block ON" } else { "DC-block OFF" };
         let cal_txt = if cal.cal_applied { "auto-cal applied" }

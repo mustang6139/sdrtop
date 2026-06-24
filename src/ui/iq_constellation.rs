@@ -165,7 +165,9 @@ fn cloud_stats(coords: &[(f64, f64)], ellipse: Option<(f64, f64, f64, f64, f64)>
             s.evm_rms = Some(evm_rms);
             s.evm_pk  = Some(pk);
             s.mer_db  = Some(mer.min(60.0));
-            s.ecc     = Some(a / b.max(1e-9));
+            // Cap the ratio: a near-collinear cloud (b→0, e.g. 90° phase imbalance)
+            // would otherwise print a ~1e9 eccentricity.
+            s.ecc     = Some((a / b.max(1e-9)).min(99.0));
             let mut tilt = th.to_degrees();
             while tilt >   90.0 { tilt -= 180.0; }
             while tilt <= -90.0 { tilt += 180.0; }
@@ -343,35 +345,25 @@ impl Panel for IqConstellationPanel {
                     Span::styled(format!("{t:+.1}\u{b0}"), Style::default().fg(val)),
                 ]));
             }
-            let w = 24u16.min(inner.width);
+            // Wide enough for the longest line ("fit ecc 1.002 · tilt +0.2°" = 26);
+            // a narrower box right-clips the leading "fit" off that line.
+            let w = 28u16.min(inner.width);
             let h = (sl.len() as u16).min(inner.height);
             let rect = Rect { x: inner.x + inner.width - w, y: inner.y, width: w, height: h };
             f.render_widget(Paragraph::new(sl).alignment(Alignment::Right), rect);
         }
 
         if inner.width >= 24 && inner.height >= 6 {
-            // density legend, bottom-left
-            let leg = vec![
-                Line::from(vec![
-                    Span::styled("\u{28ff} ", Style::default().fg(HEAT[HEAT_LEVELS - 1])),
-                    Span::styled("dense  ", dimst),
-                    Span::styled("\u{2802} ", Style::default().fg(HEAT[0])),
-                    Span::styled("sparse", dimst),
-                ]),
-                Line::from(vec![
-                    Span::styled("\u{25ef} ", Style::default().fg(ellipse_color)),
-                    Span::styled("rms fit  ", dimst),
-                    Span::styled("\u{2295} ", Style::default().fg(dc_color)),
-                    Span::styled("centroid", dimst),
-                ]),
-            ];
-            let rect = Rect {
-                x: inner.x, y: inner.y + inner.height - 2,
-                width: inner.width / 2, height: 2,
-            };
-            f.render_widget(Paragraph::new(leg), rect);
+            // Caption is decorative — only draw it when the whole line fits, otherwise
+            // a centred truncation chops both ends into noise.
+            const CAPTION: &str = "image mirrors the carrier about the LO \u{00b7} DC offset \u{2192} centre spike";
+            let cap_h: u16 = if inner.height >= 7 && inner.width as usize >= CAPTION.chars().count() { 1 } else { 0 };
+            let row_y = inner.y + inner.height - 2 - cap_h;
 
-            // measured centroid, bottom-right
+            // Centroid carries live numbers, so it gets the width it needs first; the
+            // legend tiles into whatever is left and is dropped when too tight to read
+            // (its widest line is "rms fit  ⊕ centroid" = 21 cells). This stops the
+            // right-aligned centroid from left-clipping its own "I …" value.
             let cen = vec![
                 Line::from(vec![
                     Span::styled("\u{2295} ", Style::default().fg(dc_color)),
@@ -381,12 +373,42 @@ impl Panel for IqConstellationPanel {
                     format!("I {:+.4} \u{b7} Q {:+.4}", stats.cx, stats.cy), labst,
                 )),
             ];
-            let w = 22u16.min(inner.width / 2);
-            let rect = Rect {
-                x: inner.x + inner.width - w, y: inner.y + inner.height - 2,
-                width: w, height: 2,
+            let cw = 22u16.min(inner.width);
+            let cen_rect = Rect {
+                x: inner.x + inner.width - cw, y: row_y,
+                width: cw, height: 2,
             };
-            f.render_widget(Paragraph::new(cen).alignment(Alignment::Right), rect);
+            f.render_widget(Paragraph::new(cen).alignment(Alignment::Right), cen_rect);
+
+            let leg_w = inner.width.saturating_sub(cw);
+            if leg_w >= 21 {
+                let leg = vec![
+                    Line::from(vec![
+                        Span::styled("\u{28ff} ", Style::default().fg(HEAT[HEAT_LEVELS - 1])),
+                        Span::styled("dense  ", dimst),
+                        Span::styled("\u{2802} ", Style::default().fg(HEAT[0])),
+                        Span::styled("sparse", dimst),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("\u{25ef} ", Style::default().fg(ellipse_color)),
+                        Span::styled("rms fit  ", dimst),
+                        Span::styled("\u{2295} ", Style::default().fg(dc_color)),
+                        Span::styled("centroid", dimst),
+                    ]),
+                ];
+                let leg_rect = Rect { x: inner.x, y: row_y, width: leg_w, height: 2 };
+                f.render_widget(Paragraph::new(leg), leg_rect);
+            }
+
+            // Caption, full-width bottom row — echoes the scope's framing.
+            if cap_h == 1 {
+                let cap = Line::from(Span::styled(CAPTION, dimst));
+                let rect = Rect {
+                    x: inner.x, y: inner.y + inner.height - 1,
+                    width: inner.width, height: 1,
+                };
+                f.render_widget(Paragraph::new(cap).alignment(Alignment::Center), rect);
+            }
         }
     }
 }
