@@ -310,7 +310,7 @@ impl LayoutConfig {
                 PanelSpec { name: "lab_banner".into(),      position: Top,    height: Some(2), width_pct: None     },
                 PanelSpec { name: "rf_chain".into(),        position: Left,   height: None,    width_pct: Some(30) },
                 PanelSpec { name: "level_diagram".into(),   position: Body,   height: None,    width_pct: None     },
-                PanelSpec { name: "hardware_health".into(), position: Right,  height: None,    width_pct: Some(32) },
+                PanelSpec { name: "adc_loading".into(),     position: Right,  height: None,    width_pct: Some(32) },
                 PanelSpec { name: "lab_marker".into(),      position: Bottom, height: Some(2), width_pct: None     },
                 PanelSpec { name: "log".into(),             position: Bottom, height: Some(5), width_pct: None     },
                 PanelSpec { name: "footer".into(),          position: Bottom, height: None,    width_pct: None     },

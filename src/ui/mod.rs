@@ -1,3 +1,4 @@
+pub mod adc_loading;
 pub mod band_plan;
 pub mod bigdigits;
 pub mod charts;
@@ -41,6 +42,7 @@ pub mod timing_panel;
 pub mod usb_sr;
 pub mod waterfall;
 
+pub use adc_loading::AdcLoadingPanel;
 pub use command_rail::CommandRailPanel;
 pub use engine::LayoutEngine;
 pub use footer::FooterPanel;

@@ -1,0 +1,268 @@
+//! `AdcLoadingPanel` — the ADC Loading column of the Lab RF bench ([6]).
+//!
+//! Shows how hard the 8-bit ADC is actually driven: the **signed sample histogram**
+//! (a centred bell whose tails light up as they approach the rails), the **clip
+//! headroom** bar, the **loading** read-out (peak / rms / crest / effective bits /
+//! clip events), and a **modeled linearity** card (P1dB / IIP3 / IMD3 / SFDR). The
+//! thesis: fill the ADC window without hitting the rails — that is what positions the
+//! signal/noise gap the other two panels draw.
+
+use ratatui::{
+    layout::Rect,
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, Paragraph},
+    Frame,
+};
+
+use crate::state::SdrMetrics;
+use crate::ui::charts::gain_bar_colored;
+use crate::ui::panel::Panel;
+use crate::ui::rf_calc::{adc_loading, linearity, staging_verdict, OPT_PEAK_DBFS};
+
+pub struct AdcLoadingPanel;
+
+/// Vertical ⅛-block ramp for the histogram bell, 0 = blank … 8 = full cell.
+const VBLOCKS: [char; 9] = [
+    ' ', '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}',
+    '\u{2585}', '\u{2586}', '\u{2587}', '\u{2588}',
+];
+
+/// Fold the 32-bin signed histogram down to `w` display columns (sum into buckets),
+/// preserving the centre-heavy bell shape at any panel width.
+fn rebin(hist: &[u64; 32], w: usize) -> Vec<u64> {
+    if w == 0 { return Vec::new(); }
+    let mut cols = vec![0u64; w];
+    for (i, &c) in hist.iter().enumerate() {
+        let col = (i * w / 32).min(w - 1);
+        cols[col] += c;
+    }
+    cols
+}
+
+impl Panel for AdcLoadingPanel {
+    fn name(&self) -> &'static str { "adc_loading" }
+    fn min_size(&self) -> (u16, u16) { (30, 16) }
+
+    fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
+        let stale = !state.radio.hw_streaming;
+        let mut title = vec![
+            Span::raw(" "),
+            Span::styled("ADC Loading",
+                         Style::default().fg(theme.label).add_modifier(Modifier::BOLD)),
+        ];
+        if stale { title.push(Span::styled(" [STALE]", Style::default().fg(theme.stale))); }
+        title.push(Span::raw(" "));
+        let border = if focused { theme.border_focused }
+            else if stale { theme.stale } else { theme.border_default };
+        let block = Block::default()
+            .title(Line::from(title))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(border));
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+        if inner.width == 0 || inner.height == 0 { return; }
+
+        let iw  = inner.width as usize;
+        let ih  = inner.height as usize;
+        let dim = theme.border_dim;
+        let lbl = Style::default().fg(theme.label);
+
+        if stale {
+            f.render_widget(
+                Paragraph::new(Span::styled("\u{2014}\u{2014}\u{2014}", lbl)), inner);
+            return;
+        }
+
+        // --- model -------------------------------------------------------------
+        let hist = &state.iq.adc_signed_hist;
+        let n: u64 = hist.iter().sum();
+        let peak = state.signal.adc_peak_dbfs as f64;
+        let rms  = state.signal.adc_rms_dbfs as f64;
+        let load = adc_loading(peak, rms, state.signal.adc_clip_events, n);
+        let (verdict, sev) = staging_verdict(peak);
+        let sev_col = match sev {
+            2 => theme.status_crit, 1 => theme.status_warn, _ => theme.status_ok,
+        };
+        let clipping = load.clip_events > 0 || peak >= -1.0;
+
+        // --- helpers (shared visual language with the RF Diagnostics panel) -----
+        let section = |name: &str, hint: &str| -> Line<'static> {
+            let label = name.to_uppercase();
+            let left = label.chars().count() + 5;
+            let hint_w = if hint.is_empty() { 0 } else { hint.chars().count() + 1 };
+            let dashes = iw.saturating_sub(left + hint_w);
+            let mut spans = vec![
+                Span::styled("\u{251c}\u{2574} ".to_string(), Style::default().fg(dim)),
+                Span::styled(label, Style::default().fg(theme.label).add_modifier(Modifier::BOLD)),
+                Span::styled(" \u{2576}".to_string(), Style::default().fg(dim)),
+                Span::styled("\u{2500}".repeat(dashes), Style::default().fg(dim)),
+            ];
+            if !hint.is_empty() {
+                spans.push(Span::styled(format!(" {hint}"), Style::default().fg(dim)));
+            }
+            Line::from(spans)
+        };
+        // " LBL  mid............ right" — label + a mid column + a right-aligned value.
+        let row3 = |label: &str, mid: String, mid_col: Color, right: String, right_col: Color| -> Line<'static> {
+            let pad = iw.saturating_sub(1 + 4 + 1 + mid.chars().count() + right.chars().count());
+            Line::from(vec![
+                Span::raw(" "),
+                Span::styled(format!("{label:<4}"), lbl),
+                Span::raw(" "),
+                Span::styled(mid, Style::default().fg(mid_col)),
+                Span::raw(" ".repeat(pad.max(1))),
+                Span::styled(right, Style::default().fg(right_col).add_modifier(Modifier::BOLD)),
+            ])
+        };
+
+        let mut lines: Vec<Line> = Vec::new();
+
+        // --- HISTOGRAM BELL ----------------------------------------------------
+        // Chart fills whatever height is left after the fixed read-out blocks below.
+        let chart_w = iw.saturating_sub(1).max(8);
+        let chart_h = ih.saturating_sub(16).clamp(3, 10);
+        let cols = rebin(hist, chart_w);
+        let maxc  = cols.iter().copied().max().unwrap_or(0);
+
+        let col_color = |c: usize| -> Color {
+            let p = (c as f64 + 0.5) / chart_w as f64;
+            let d = (p - 0.5).abs() * 2.0; // 0 = centre, 1 = rail
+            if d > 0.88 { if clipping { theme.status_crit } else { theme.status_warn } }
+            else if d > 0.62 { theme.value }
+            else { theme.value_hi }
+        };
+
+        if maxc == 0 {
+            lines.push(Line::from(Span::styled(" no samples yet", lbl)));
+        } else {
+            let heights: Vec<f64> = cols.iter().map(|&c| c as f64 / maxc as f64).collect();
+            for r in 0..chart_h {
+                let rb = chart_h - 1 - r; // rows fill from the bottom up
+                let mut spans: Vec<Span> = vec![Span::raw(" ")];
+                for c in 0..chart_w {
+                    let he = (heights[c] * chart_h as f64 * 8.0).round() as usize;
+                    let cell = he.saturating_sub(rb * 8).min(8);
+                    let ch = VBLOCKS[cell];
+                    let color = if cell == 0 { dim } else { col_color(c) };
+                    spans.push(Span::styled(ch.to_string(), Style::default().fg(color)));
+                }
+                lines.push(Line::from(spans));
+            }
+        }
+        // x-axis: −FS … 0 … +FS under the bell.
+        let mut axis: Vec<char> = vec![' '; chart_w];
+        let place = |axis: &mut Vec<char>, at: usize, s: &str| {
+            let start = at.min(chart_w.saturating_sub(s.chars().count()));
+            for (k, ch) in s.chars().enumerate() {
+                if start + k < chart_w { axis[start + k] = ch; }
+            }
+        };
+        place(&mut axis, 0, "\u{2212}FS");
+        place(&mut axis, chart_w / 2, "0");
+        place(&mut axis, chart_w.saturating_sub(3), "+FS");
+        lines.push(Line::from(vec![
+            Span::raw(" "),
+            Span::styled(axis.into_iter().collect::<String>(), Style::default().fg(dim)),
+        ]));
+        lines.push(Line::raw(""));
+
+        // --- CLIP HEADROOM -----------------------------------------------------
+        // Headroom = how far the peak sits below 0 dBFS; the tick marks the optimal
+        // landing (−OPT_PEAK_DBFS, i.e. 8 dB of headroom).
+        let headroom = -peak;
+        const HDRM_MAX: f64 = 24.0;
+        const VALW: usize = 11;
+        let bar_w = iw.saturating_sub(1 + 4 + 1 + 1 + VALW).max(6);
+        lines.push(section("Headroom", "\u{2502} = optimal"));
+        let mut bar = gain_bar_colored(headroom.clamp(0.0, HDRM_MAX) as u32, HDRM_MAX as u32,
+                                       bar_w, theme.status_warn, theme.status_ok, dim);
+        let tick = ((-OPT_PEAK_DBFS / HDRM_MAX).clamp(0.0, 1.0) * bar_w as f64).round() as usize;
+        let tick = tick.min(bar_w.saturating_sub(1));
+        if tick < bar.len() {
+            bar[tick] = Span::styled("\u{250a}".to_string(), Style::default().fg(theme.value_hi));
+        }
+        let mut hdrm_spans = vec![Span::raw(" "), Span::styled(format!("{:<4}", "HDRM"), lbl), Span::raw(" ")];
+        hdrm_spans.extend(bar);
+        hdrm_spans.push(Span::raw(" "));
+        hdrm_spans.push(Span::styled(format!("{headroom:+.0} dB"),
+                        Style::default().fg(sev_col).add_modifier(Modifier::BOLD)));
+        lines.push(Line::from(hdrm_spans));
+        lines.push(Line::raw(""));
+
+        // --- LOADING -----------------------------------------------------------
+        lines.push(section("Loading", "peak / rms"));
+        lines.push(row3("peak", format!("{:.0} dBFS", load.peak_dbfs), sev_col,
+                        format!("{}/127 cts", load.peak_counts), theme.value));
+        lines.push(row3("rms", format!("{:.0} dBFS", load.rms_dbfs), theme.value,
+                        format!("crest {:.1} dB", load.crest_db), theme.value));
+        lines.push(row3("bits", format!("{:.1} / 8 eff", load.enob), theme.value_hi,
+                        "ENOB".to_string(), dim));
+        let (clip_txt, clip_col) = if load.clip_events == 0 {
+            ("none".to_string(), theme.status_ok)
+        } else {
+            (format!("{} hits", load.clip_events), theme.status_crit)
+        };
+        let n_txt = if load.n >= 1000 { format!("{}k", load.n / 1000) } else { format!("{}", load.n) };
+        lines.push(row3("clip", format!("{clip_txt} / {n_txt}"), clip_col,
+                        verdict.to_string(), sev_col));
+        lines.push(Line::raw(""));
+
+        // --- LINEARITY (modeled) -----------------------------------------------
+        let lin = linearity(state.radio.lna_gain, state.radio.vga_gain);
+        lines.push(section("Linearity", "modeled"));
+        lines.push(row3("P1dB", format!("{:.0} dB hdrm", lin.p1db_headroom_db), theme.value,
+                        "compression".to_string(), dim));
+        lines.push(row3("IIP3", format!("{:+.0} dBm", lin.iip3_dbm), theme.value,
+                        format!("IMD3 {:.0} dBc", lin.imd3_dbc), theme.value));
+        lines.push(row3("SFDR", format!("{:.0} dB", lin.sfdr_db), theme.value_hi,
+                        format!("8-bit \u{2264}{:.0}", lin.sfdr_limit_db), dim));
+
+        // Teaching caption.
+        lines.push(Line::from(Span::styled(
+            " fill the range without hitting the rails", Style::default().fg(dim))));
+
+        // Dense fallback: drop the airy spacers if too tall for the pane.
+        if lines.len() > ih {
+            lines.retain(|l| l.spans.iter().any(|s| !s.content.trim().is_empty()));
+        }
+        f.render_widget(Paragraph::new(lines), inner);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panel_name_and_min_size() {
+        let p = AdcLoadingPanel;
+        assert_eq!(p.name(), "adc_loading");
+        let (w, h) = p.min_size();
+        assert!(w >= 16 && h >= 8);
+    }
+
+    #[test]
+    fn rebin_preserves_total() {
+        let mut hist = [0u64; 32];
+        hist[16] = 100; hist[15] = 50; hist[0] = 7; hist[31] = 3;
+        let cols = rebin(&hist, 10);
+        assert_eq!(cols.iter().sum::<u64>(), 160, "rebin must not lose counts");
+        assert_eq!(cols.len(), 10);
+    }
+
+    #[test]
+    fn rebin_centre_heavy_input_peaks_in_middle() {
+        let mut hist = [0u64; 32];
+        hist[16] = 1000; // mid-scale (v ≈ 0)
+        let cols = rebin(&hist, 8);
+        let peak = cols.iter().enumerate().max_by_key(|(_, &c)| c).unwrap().0;
+        assert!(peak >= 3 && peak <= 4, "centre bin should land mid-bell, got col {peak}");
+    }
+
+    #[test]
+    fn rebin_zero_width_is_empty() {
+        assert!(rebin(&[1u64; 32], 0).is_empty());
+    }
+}
