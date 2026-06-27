@@ -42,7 +42,7 @@ fn rebin(hist: &[u64; 32], w: usize) -> Vec<u64> {
 
 impl Panel for AdcLoadingPanel {
     fn name(&self) -> &'static str { "adc_loading" }
-    fn min_size(&self) -> (u16, u16) { (30, 16) }
+    fn min_size(&self) -> (u16, u16) { (30, 18) }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         let stale = !state.radio.hw_streaming;
