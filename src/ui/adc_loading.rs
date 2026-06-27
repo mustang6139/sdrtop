@@ -52,6 +52,9 @@ impl Panel for AdcLoadingPanel {
                          Style::default().fg(theme.label).add_modifier(Modifier::BOLD)),
         ];
         if stale { title.push(Span::styled(" [STALE]", Style::default().fg(theme.stale))); }
+        else if state.lab.rf_freeze.is_some() {
+            title.push(Span::styled(" [FRZ]", Style::default().fg(theme.status_warn)));
+        }
         title.push(Span::raw(" "));
         let border = if focused { theme.border_focused }
             else if stale { theme.stale } else { theme.border_default };
@@ -75,12 +78,16 @@ impl Panel for AdcLoadingPanel {
             return;
         }
 
-        // --- model -------------------------------------------------------------
-        let hist = &state.iq.adc_signed_hist;
+        // --- model (frozen snapshot when held, else live) ----------------------
+        let fz = state.lab.rf_freeze.as_ref();
+        let hist = fz.map(|f| &f.signed_hist).unwrap_or(&state.iq.adc_signed_hist);
         let n: u64 = hist.iter().sum();
-        let peak = state.signal.adc_peak_dbfs as f64;
-        let rms  = state.signal.adc_rms_dbfs as f64;
-        let load = adc_loading(peak, rms, state.signal.adc_clip_events, n);
+        let peak = fz.map(|f| f.peak_dbfs).unwrap_or(state.signal.adc_peak_dbfs) as f64;
+        let rms  = fz.map(|f| f.rms_dbfs).unwrap_or(state.signal.adc_rms_dbfs) as f64;
+        let clip = fz.map(|f| f.clip_events).unwrap_or(state.signal.adc_clip_events);
+        let (lna_g, vga_g) = fz.map(|f| (f.lna_gain, f.vga_gain))
+            .unwrap_or((state.radio.lna_gain, state.radio.vga_gain));
+        let load = adc_loading(peak, rms, clip, n);
         let (verdict, sev) = staging_verdict(peak);
         let sev_col = match sev {
             2 => theme.status_crit, 1 => theme.status_warn, _ => theme.status_ok,
@@ -141,8 +148,8 @@ impl Panel for AdcLoadingPanel {
             for r in 0..chart_h {
                 let rb = chart_h - 1 - r; // rows fill from the bottom up
                 let mut spans: Vec<Span> = vec![Span::raw(" ")];
-                for c in 0..chart_w {
-                    let he = (heights[c] * chart_h as f64 * 8.0).round() as usize;
+                for (c, &h) in heights.iter().enumerate() {
+                    let he = (h * chart_h as f64 * 8.0).round() as usize;
                     let cell = he.saturating_sub(rb * 8).min(8);
                     let ch = VBLOCKS[cell];
                     let color = if cell == 0 { dim } else { col_color(c) };
@@ -210,7 +217,7 @@ impl Panel for AdcLoadingPanel {
         lines.push(Line::raw(""));
 
         // --- LINEARITY (modeled) -----------------------------------------------
-        let lin = linearity(state.radio.lna_gain, state.radio.vga_gain);
+        let lin = linearity(lna_g, vga_g);
         lines.push(section("Linearity", "modeled"));
         lines.push(row3("P1dB", format!("{:.0} dB hdrm", lin.p1db_headroom_db), theme.value,
                         "compression".to_string(), dim));

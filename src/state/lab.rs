@@ -12,6 +12,22 @@ pub const AVG_MAX: u16 = 16;
 pub const REF_MIN: f32 = -120.0;
 pub const REF_MAX: f32 = 0.0;
 
+/// A frozen Lab RF display snapshot (`[⎵]`/`[F]`). When present, the ADC-loading and
+/// level-diagram panels render this captured state instead of the live stream, so the
+/// bench can be studied without the histogram and traces moving. RX keeps running — only
+/// the display is held. Captures everything the two panels derive from.
+#[derive(Clone)]
+pub struct RfFreeze {
+    pub signed_hist:  [u64; 32],
+    pub peak_dbfs:    f32,
+    pub rms_dbfs:     f32,
+    pub clip_events:  u64,
+    pub snr_db:       f32,
+    pub amp_enabled:  bool,
+    pub lna_gain:     u32,
+    pub vga_gain:     u32,
+}
+
 /// Measurement-state for the lab instrument-chrome.
 #[derive(Clone)]
 pub struct LabState {
@@ -28,11 +44,22 @@ pub struct LabState {
     /// strongest carrier and its mirror live; `Some((carrier_hz, image_hz))` pins
     /// them (set by `[M]`), so the readout freezes onto a chosen pair.
     pub iq_marker_pin: Option<(u64, u64)>,
+    /// Lab RF auto-gain continuous-track latch (`[A]` toggles it once the chain is
+    /// already optimal). When set, the rx poll task re-nudges LNA/VGA toward the
+    /// optimal ADC level on drift; any manual gain key clears it. The RF Diagnostics
+    /// chip `✓` follows this flag.
+    pub rf_autotrack: bool,
+    /// Lab RF display freeze (`[⎵]`/`[F]`): captured ADC-loading + level-diagram state,
+    /// or `None` when live.
+    pub rf_freeze: Option<RfFreeze>,
 }
 
 impl Default for LabState {
     fn default() -> Self {
-        Self { ref_dbfs: None, avg_n: 5, ref_trace: None, iq_marker_pin: None }
+        Self {
+            ref_dbfs: None, avg_n: 5, ref_trace: None, iq_marker_pin: None,
+            rf_autotrack: false, rf_freeze: None,
+        }
     }
 }
 
@@ -106,6 +133,13 @@ mod tests {
         s.adjust_ref(1000.0);
         assert_eq!(s.ref_dbfs, Some(REF_MAX));
         assert_eq!(s.ref_label(), "0 dBFS");
+    }
+
+    #[test]
+    fn rf_bench_defaults_idle_and_live() {
+        let s = LabState::default();
+        assert!(!s.rf_autotrack, "auto-track latch starts off");
+        assert!(s.rf_freeze.is_none(), "display starts live, not frozen");
     }
 
     #[test]

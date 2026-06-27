@@ -51,6 +51,9 @@ impl Panel for LevelDiagramPanel {
                          Style::default().fg(theme.label).add_modifier(Modifier::BOLD)),
         ];
         if stale { title.push(Span::styled(" [STALE]", Style::default().fg(theme.stale))); }
+        else if state.lab.rf_freeze.is_some() {
+            title.push(Span::styled(" [FRZ]", Style::default().fg(theme.status_warn)));
+        }
         title.push(Span::raw(" "));
         let border = if focused { theme.border_focused }
             else if stale { theme.stale } else { theme.border_default };
@@ -71,9 +74,13 @@ impl Panel for LevelDiagramPanel {
         }
 
         // --- model: 5 nodes ANT, LNA, MIX, VGA, ADC (ADC = VGA output) ----------
-        let stages = cascade(state.radio.amp_enabled, state.radio.lna_gain, state.radio.vga_gain);
-        let adc_peak = state.signal.adc_peak_dbfs as f64;
-        let snr = state.signal.peak_to_nf_db as f64;
+        // Frozen snapshot when held, else the live gain/level.
+        let fz = state.lab.rf_freeze.as_ref();
+        let (amp, lna, vga) = fz.map(|f| (f.amp_enabled, f.lna_gain, f.vga_gain))
+            .unwrap_or((state.radio.amp_enabled, state.radio.lna_gain, state.radio.vga_gain));
+        let stages = cascade(amp, lna, vga);
+        let adc_peak = fz.map(|f| f.peak_dbfs).unwrap_or(state.signal.adc_peak_dbfs) as f64;
+        let snr = fz.map(|f| f.snr_db).unwrap_or(state.signal.peak_to_nf_db) as f64;
         let mut nodes: Vec<StageLevel> = level_lineup(adc_peak, snr, &stages);
         if let Some(last) = nodes.last().copied() {
             nodes.push(StageLevel { label: "ADC", ..last });

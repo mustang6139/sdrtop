@@ -14,7 +14,7 @@ mod waterfall;
 
 pub(crate) use acc::Accumulators;
 pub use iq::{IqState, IqCalState, CONSTELLATION_CAP};
-pub use lab::LabState;
+pub use lab::{LabState, RfFreeze};
 pub use micro::MicroView;
 pub use observer::ObserverState;
 pub use radio::RadioState;

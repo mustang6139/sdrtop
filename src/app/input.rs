@@ -92,6 +92,7 @@ fn handle_normal(
         Some("spectrum")        => handle_spectrum_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         Some("waterfall")       => handle_waterfall_focus(key, state, engine, show_help, show_footer, focus_keys),
         Some("iq_diagnostics")  => handle_iq_focus(key, state, device, engine, show_help, show_footer, focus_keys),
+        Some("rf_chain")        => handle_rf_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         Some("hardware_health") => handle_health_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         Some("timing_panel")    => handle_timing_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         Some("sweep_panel")      => handle_sweep_focus(key, state, device, engine, show_help, show_footer, focus_keys),
@@ -378,8 +379,10 @@ fn handle_waterfall_focus(
 //
 // Each lab panel's focus mode adds only panel-specific actions; every other key
 // falls through to the global handler (so Esc, Space, gain, etc. keep working).
-// `rf_chain` deliberately has no focus mode — its gain controls are already the
-// global [↑↓]/[[]]/[A]/[R] bindings, so a focus mode would only duplicate them.
+// `rf_chain` (the Lab RF "RF Diagnostics" panel) adds a focus mode for the bench's
+// own actions: `[A]` auto-gain (one-shot to optimal, then a press at optimum latches
+// a continuous track) and `[⎵]`/`[F]` to freeze the histogram + level diagram. The
+// gain nudges themselves ([↑↓] LNA, [ ] VGA) still fall through to the global keys.
 
 /// `iq_diagnostics` focus: `[C]` logs a one-line snapshot of the current IQ
 /// balance figures as a reference capture.
@@ -490,6 +493,99 @@ fn handle_iq_focus(
             m.iq.cal.frozen = !m.iq.cal.frozen;
             let frozen = m.iq.cal.frozen;
             m.push_log(if frozen { "Constellation frozen" } else { "Constellation live" }.to_string());
+            return KeyAction::Continue;
+        }
+        _ => {}
+    }
+    handle_global(key, state, device, engine, show_help, show_footer, focus_keys)
+}
+
+/// `rf_chain` (RF Diagnostics) focus (`[D]`): the Lab RF bench actions.
+/// `[A]` — when the chain is off-optimal, one-shot jump LNA/VGA to the staging
+/// target (signal ≈ −8 dBFS); when already optimal, toggle the continuous auto-track
+/// latch. `[⎵]`/`[F]` freeze or thaw the histogram + level diagram. Everything else
+/// (incl. the [↑↓]/[ ] gain nudges) falls through to the global handler.
+fn handle_rf_focus(
+    key: KeyEvent,
+    state: &Arc<Mutex<SdrMetrics>>,
+    device: Option<&Arc<dyn hardware::SdrDevice>>,
+    engine: &mut ui::LayoutEngine,
+    show_help: &mut bool,
+    show_footer: &mut bool,
+    focus_keys: &HashMap<char, &'static str>,
+) -> KeyAction {
+    use crate::ui::rf_calc::staging_target;
+    match key.code {
+        // [A] — auto-gain: one-shot to optimal, or latch the continuous track once
+        // already there. HackRF-only; never runs unless streaming.
+        KeyCode::Char('a') | KeyCode::Char('A') => {
+            let (peak, lna, vga, friis, streaming) = {
+                let m = state.lock().unwrap_or_else(|e| e.into_inner());
+                (m.signal.adc_peak_dbfs as f64, m.radio.lna_gain, m.radio.vga_gain,
+                 m.caps.friis_applicable, m.radio.hw_streaming)
+            };
+            if !streaming {
+                state.lock().unwrap_or_else(|e| e.into_inner())
+                    .push_log("Auto-gain: start RX first ([Space])".to_string());
+                return KeyAction::Continue;
+            }
+            if !friis {
+                state.lock().unwrap_or_else(|e| e.into_inner())
+                    .push_log("Auto-gain: single-tuner radio \u{2014} not applicable".to_string());
+                return KeyAction::Continue;
+            }
+            let (lna_t, vga_t) = staging_target(peak, lna, vga);
+            if (lna_t, vga_t) != (lna, vga) {
+                // Off-optimal → one-shot jump through the same clamped gain path the
+                // manual keys use. The latch is left as-is (hands-off one-shot).
+                if let Some(device) = device {
+                    let r1 = if lna_t != lna { device.set_lna_gain(lna_t) } else { Ok(()) };
+                    let r2 = if vga_t != vga { device.set_vga_gain(vga_t) } else { Ok(()) };
+                    let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
+                    match (r1, r2) {
+                        (Ok(()), Ok(())) => {
+                            m.radio.lna_gain = lna_t;
+                            m.radio.vga_gain = vga_t;
+                            m.ui.note_mode_action(RailMode::Bench);
+                            m.push_log(format!(
+                                "Auto-gain \u{2192} LNA {lna_t} \u{00b7} VGA {vga_t} dB (signal \u{2192} \u{2212}8 dBFS)"));
+                        }
+                        _ => m.push_log("Auto-gain: device error".to_string()),
+                    }
+                }
+            } else {
+                // Already optimal → toggle the continuous auto-track latch.
+                let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
+                m.lab.rf_autotrack = !m.lab.rf_autotrack;
+                let on = m.lab.rf_autotrack;
+                m.push_log(if on {
+                    "Auto-gain: continuous track ON \u{2014} re-nudges on drift".to_string()
+                } else {
+                    "Auto-gain: continuous track OFF".to_string()
+                });
+            }
+            return KeyAction::Continue;
+        }
+        // [⎵]/[F] — freeze / thaw the histogram + level diagram (display only; RX
+        // keeps running). Bound to focus, not global Space=RX.
+        KeyCode::Char(' ') | KeyCode::Char('f') | KeyCode::Char('F') => {
+            let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
+            if m.lab.rf_freeze.is_some() {
+                m.lab.rf_freeze = None;
+                m.push_log("Lab RF: live".to_string());
+            } else {
+                m.lab.rf_freeze = Some(crate::state::RfFreeze {
+                    signed_hist:  m.iq.adc_signed_hist,
+                    peak_dbfs:    m.signal.adc_peak_dbfs,
+                    rms_dbfs:     m.signal.adc_rms_dbfs,
+                    clip_events:  m.signal.adc_clip_events,
+                    snr_db:       m.signal.peak_to_nf_db,
+                    amp_enabled:  m.radio.amp_enabled,
+                    lna_gain:     m.radio.lna_gain,
+                    vga_gain:     m.radio.vga_gain,
+                });
+                m.push_log("Lab RF: frozen \u{2014} histogram & diagram held".to_string());
+            }
             return KeyAction::Continue;
         }
         _ => {}
@@ -846,6 +942,7 @@ fn handle_global(
                     m.radio.lna_gain           = DEFAULT_LNA_GAIN;
                     m.radio.vga_gain           = DEFAULT_VGA_GAIN;
                     m.radio.amp_enabled        = false;
+                    m.lab.rf_autotrack         = false;
                     m.radio.frequency          = def_freq;
                     m.radio.config_sample_rate = def_sr;
                     m.radio.bb_filter_hz       = bb_bw;
@@ -922,7 +1019,7 @@ fn handle_global(
                 let result = device.set_lna_gain(new_gain);
                 let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
                 match result {
-                    Ok(()) => { m.radio.lna_gain = new_gain; m.ui.note_mode_action(RailMode::Bench); m.push_log(format!("{} gain → {} dB", primary_gain_label(gain), new_gain)); }
+                    Ok(()) => { m.radio.lna_gain = new_gain; m.lab.rf_autotrack = false; m.ui.note_mode_action(RailMode::Bench); m.push_log(format!("{} gain → {} dB", primary_gain_label(gain), new_gain)); }
                     Err(e) => m.push_log(format!("Gain error: {}", e)),
                 }
             }
@@ -935,7 +1032,7 @@ fn handle_global(
                 let result = device.set_lna_gain(new_gain);
                 let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
                 match result {
-                    Ok(()) => { m.radio.lna_gain = new_gain; m.ui.note_mode_action(RailMode::Bench); m.push_log(format!("{} gain → {} dB", primary_gain_label(gain), new_gain)); }
+                    Ok(()) => { m.radio.lna_gain = new_gain; m.lab.rf_autotrack = false; m.ui.note_mode_action(RailMode::Bench); m.push_log(format!("{} gain → {} dB", primary_gain_label(gain), new_gain)); }
                     Err(e) => m.push_log(format!("Gain error: {}", e)),
                 }
             }
@@ -948,7 +1045,7 @@ fn handle_global(
                     let result = device.set_vga_gain(new_gain);
                     let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
                     match result {
-                        Ok(()) => { m.radio.vga_gain = new_gain; m.ui.note_mode_action(RailMode::Bench); m.push_log(format!("VGA gain → {} dB", new_gain)); }
+                        Ok(()) => { m.radio.vga_gain = new_gain; m.lab.rf_autotrack = false; m.ui.note_mode_action(RailMode::Bench); m.push_log(format!("VGA gain → {} dB", new_gain)); }
                         Err(e) => m.push_log(format!("VGA gain error: {}", e)),
                     }
                 }
@@ -961,7 +1058,7 @@ fn handle_global(
                     let result = device.set_vga_gain(new_gain);
                     let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
                     match result {
-                        Ok(()) => { m.radio.vga_gain = new_gain; m.ui.note_mode_action(RailMode::Bench); m.push_log(format!("VGA gain → {} dB", new_gain)); }
+                        Ok(()) => { m.radio.vga_gain = new_gain; m.lab.rf_autotrack = false; m.ui.note_mode_action(RailMode::Bench); m.push_log(format!("VGA gain → {} dB", new_gain)); }
                         Err(e) => m.push_log(format!("VGA gain error: {}", e)),
                     }
                 }
@@ -979,6 +1076,7 @@ fn handle_global(
                 match result {
                     Ok(()) => {
                         m.radio.amp_enabled = new_state;
+                        m.lab.rf_autotrack = false;
                         m.ui.note_mode_action(RailMode::Bench);
                         m.push_log(format!("{} {}", label, if new_state { "ON" } else { "OFF" }));
                     }

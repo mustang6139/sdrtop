@@ -356,6 +356,37 @@ pub fn spawn_rx_task(
                 }
             }
 
+            // ── Lab RF continuous auto-gain (AGC-lite) ──────────────────────────
+            // Only when the [A] latch is set, streaming, and on a cascade-capable
+            // radio. Re-centres the ADC peak when it drifts out of the comfortable
+            // window, jumping LNA/VGA to the same staging target the one-shot uses.
+            // Device sets run with no lock held; at the rails the target equals the
+            // current gain, so there is no action (and no log spam).
+            if hw_streaming && hw_rx_active && acc_samples > 0 {
+                let (latched, friis, lna, vga) = {
+                    let m = state.lock().unwrap_or_else(|e| e.into_inner());
+                    (m.lab.rf_autotrack, m.caps.friis_applicable, m.radio.lna_gain, m.radio.vga_gain)
+                };
+                if latched && friis && !(-12.0..=-4.0).contains(&adc_peak_dbfs) {
+                    let (lna_t, vga_t) =
+                        crate::ui::rf_calc::staging_target(adc_peak_dbfs as f64, lna, vga);
+                    if (lna_t, vga_t) != (lna, vga) {
+                        let r1 = if lna_t != lna { device.set_lna_gain(lna_t) } else { Ok(()) };
+                        let r2 = if vga_t != vga { device.set_vga_gain(vga_t) } else { Ok(()) };
+                        let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
+                        match (r1, r2) {
+                            (Ok(()), Ok(())) => {
+                                m.radio.lna_gain = lna_t;
+                                m.radio.vga_gain = vga_t;
+                                m.push_log(format!(
+                                    "Auto-gain track \u{2192} LNA {lna_t} \u{00b7} VGA {vga_t} dB"));
+                            }
+                            _ => m.push_log("Auto-gain track: device error".to_string()),
+                        }
+                    }
+                }
+            }
+
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
     });

@@ -33,6 +33,12 @@ fn fmt_mhz(hz: u32) -> String {
 impl Panel for RfChainPanel {
     fn name(&self) -> &'static str { "rf_chain" }
     fn min_size(&self) -> (u16, u16) { (32, 16) }
+    // `d` (Diagnostics) focuses the RF bench for its own actions; `r`/`f` are taken
+    // globally (reset / frequency), so the panel takes a free mnemonic.
+    fn focus_key(&self) -> Option<char> { Some('d') }
+    fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
+        &[("\u{2191}\u{2193}", "LNA"), ("[ ]", "VGA"), ("A", "auto-gain"), ("\u{23B5}", "freeze")]
+    }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         let stale = !state.radio.hw_streaming;
@@ -242,18 +248,20 @@ impl Panel for RfChainPanel {
             let bg = if active { theme.value_hi } else { theme.border_dim };
             Span::styled(format!(" {label} "), Style::default().bg(bg).fg(Color::Rgb(4, 6, 15)))
         };
+        let tracking = state.lab.rf_autotrack;
         lines.push(Line::from(vec![
             Span::raw(" "),
-            chip("A auto-gain", false), Span::raw(" "),
+            chip("A auto-gain", tracking), Span::raw(" "),
             chip("\u{2191}\u{2193} LNA", false), Span::raw(" "),
             chip("[ ] VGA", false),
         ]));
         let limited = if state.signal.adc_rms_dbfs > -50.0 { "analog-noise limited" }
                       else { "quantisation limited" };
         let amp_txt = if amp { "AMP on" } else { "AMP bypass" };
+        let ag_txt  = if tracking { "auto-gain \u{2713} tracking" } else { "auto-gain idle" };
         lines.push(Line::from(vec![
             Span::raw(" "),
-            Span::styled(format!("{amp_txt} \u{00b7} auto-gain idle \u{00b7} {limited}"),
+            Span::styled(format!("{amp_txt} \u{00b7} {ag_txt} \u{00b7} {limited}"),
                          Style::default().fg(dim)),
         ]));
 
