@@ -358,22 +358,6 @@ fn chain_verdict(sat_pct: f32, headroom_db: f32) -> (&'static str, i8) {
     else                       { ("optimal",  0) }
 }
 
-/// Which blank-spacer indices to drop so an airy stack of `total` lines fits
-/// `avail` rows. `blank_idx` are the indices (into the full line list) of the
-/// droppable spacer rows, in order.
-///
-/// When the overflow meets or exceeds the whole spacer budget every spacer goes
-/// (true dense). Otherwise only as many as needed are removed, picked evenly
-/// across the spacer list so the surviving breathing room stays balanced — this
-/// replaces the old all-or-nothing cliff that, at in-between heights, collapsed
-/// to fully dense and stranded a block of blank rows above the log foot.
-fn spacers_to_drop(total: usize, blank_idx: &[usize], avail: usize) -> Vec<usize> {
-    if total <= avail { return Vec::new(); }
-    let excess = total - avail;
-    if excess >= blank_idx.len() { return blank_idx.to_vec(); }
-    (0..excess).map(|k| blank_idx[k * blank_idx.len() / excess]).collect()
-}
-
 /// The mode-adaptive lead card that sits between the mode strip and the SIGNAL
 /// zone. Only this block changes with the mode; everything below is fixed.
 fn mode_card_lines(mode: RailMode, state: &SdrMetrics, stale: bool,
@@ -809,17 +793,7 @@ impl Panel for CommandRailPanel {
         // room as fits instead of snapping to fully dense and stranding empty rows
         // above the foot. Tall rails keep every spacer; very short ones drop them
         // all and lean on the `╴SECTION╶` nameplates for separation.
-        let avail = stack_area.height as usize;
-        if lines.len() > avail {
-            let blank_idx: Vec<usize> = lines.iter().enumerate()
-                .filter(|(_, l)| l.spans.iter().all(|s| s.content.trim().is_empty()))
-                .map(|(i, _)| i)
-                .collect();
-            let drop: std::collections::HashSet<usize> =
-                spacers_to_drop(lines.len(), &blank_idx, avail).into_iter().collect();
-            let mut i = 0usize;
-            lines.retain(|_| { let keep = !drop.contains(&i); i += 1; keep });
-        }
+        chrome::collapse_spacers(&mut lines, stack_area.height as usize);
         f.render_widget(Paragraph::new(lines), stack_area);
 
         if let Some(foot) = foot_area {
@@ -942,47 +916,6 @@ mod tests {
         // Compact kicks in below that — the strip then uses 3-letter codes.
         assert!(mode_tabs_full_w() > 20, "narrow rail must compact");
         assert!(mode_tabs_full_w() <= 28, "wide rail shows full labels");
-    }
-
-    #[test]
-    fn spacers_to_drop_keeps_all_when_it_fits() {
-        let blanks = vec![3, 5, 7, 9];
-        assert!(spacers_to_drop(20, &blanks, 20).is_empty(), "exact fit drops nothing");
-        assert!(spacers_to_drop(18, &blanks, 20).is_empty(), "room to spare drops nothing");
-    }
-
-    #[test]
-    fn spacers_to_drop_drops_all_when_overflow_exceeds_budget() {
-        let blanks = vec![3, 5, 7, 9];
-        // Overflow of 6 but only 4 spacers — every spacer must go (true dense).
-        assert_eq!(spacers_to_drop(30, &blanks, 24), blanks);
-        // Overflow exactly equal to the spacer count also clears them all.
-        assert_eq!(spacers_to_drop(28, &blanks, 24), blanks);
-    }
-
-    #[test]
-    fn spacers_to_drop_removes_only_excess_spread_evenly() {
-        let blanks = vec![3, 5, 7, 9, 11, 13]; // 6 spacers
-        // Overflow of 2 → drop 2 spacers, spread across the list (not the first two).
-        let drop = spacers_to_drop(20, &blanks, 18);
-        assert_eq!(drop.len(), 2, "drops exactly the overflow");
-        assert_eq!(drop, vec![3, 9], "evenly spaced: 1st and 4th spacer");
-        // Each survivor count checks out: 6 spacers − 2 dropped = 4 kept.
-        let kept = blanks.iter().filter(|b| !drop.contains(b)).count();
-        assert_eq!(kept, 4);
-    }
-
-    #[test]
-    fn spacers_to_drop_indices_are_distinct() {
-        let blanks: Vec<usize> = (0..13).collect();
-        for excess in 1..13 {
-            let total = 40;
-            let avail = total - excess;
-            let drop = spacers_to_drop(total, &blanks, avail);
-            let unique: std::collections::HashSet<_> = drop.iter().collect();
-            assert_eq!(drop.len(), unique.len(), "excess={excess}: no repeated drop index");
-            assert_eq!(drop.len(), excess, "excess={excess}: drops exactly `excess` spacers");
-        }
     }
 
     #[test]

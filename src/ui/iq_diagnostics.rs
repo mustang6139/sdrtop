@@ -356,12 +356,10 @@ impl Panel for IqDiagnosticsPanel {
             Span::styled(foot, Style::default().fg(dim)),
         ]));
 
-        // Self-adjusting density: drop the airy spacers if the panel is too short to
-        // hold them, so a small lab pane still shows every reading. The section
-        // nameplates keep the grouping either way.
-        if lines.len() > inner.height as usize {
-            lines.retain(|l| l.spans.iter().any(|s| !s.content.trim().is_empty()));
-        }
+        // Self-adjusting density: drop only as many airy spacers as needed to fit,
+        // spread evenly, so a short lab pane keeps balanced breathing room and still
+        // shows every reading. The section nameplates keep the grouping either way.
+        crate::ui::chrome::collapse_spacers(&mut lines, inner.height as usize);
         f.render_widget(Paragraph::new(lines), inner);
     }
 }

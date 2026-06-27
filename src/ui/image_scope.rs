@@ -400,11 +400,9 @@ impl Panel for ImageScopePanel {
             Span::styled("image mirrors the carrier about the LO", Style::default().fg(dimc)),
         ]));
 
-        // Density fallback: on a very short pane, drop the chart's gap line so the
-        // readouts always survive.
-        if lines.len() > ih {
-            lines.retain(|l| l.spans.iter().any(|s| !s.content.trim().is_empty()));
-        }
+        // Self-adjusting density: drop only as many airy spacers as needed to fit,
+        // spread evenly, so a short pane keeps balanced breathing room. (chrome)
+        crate::ui::chrome::collapse_spacers(&mut lines, ih);
         let _ = r.carrier_idx; // (kept for tests / future cursor)
         f.render_widget(Paragraph::new(lines), inner);
     }

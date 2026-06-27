@@ -189,9 +189,9 @@ impl Panel for LevelDiagramPanel {
             Style::default().fg(dim)));
         lines.push(Line::from(legend));
 
-        if lines.len() > ih {
-            lines.retain(|l| l.spans.iter().any(|s| !s.content.trim().is_empty()));
-        }
+        // Self-adjusting density: drop only as many airy spacers as needed to fit,
+        // spread evenly, so a short pane keeps balanced breathing room. (chrome)
+        crate::ui::chrome::collapse_spacers(&mut lines, ih);
         f.render_widget(Paragraph::new(lines), inner);
     }
 }
