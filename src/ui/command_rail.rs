@@ -667,7 +667,7 @@ impl Panel for CommandRailPanel {
 
         let nf = state.waterfall.last_fft.as_ref().filter(|_| !stale).map(|fr| fr.noise_floor);
         lines.push(metric_block(
-            "NF", "dBFS",
+            "FLR", "dBFS",
             nf.map(|v| format!("{v:.1}")),
             theme.value,
             &state.signal.nf_history,
