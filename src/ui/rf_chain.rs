@@ -252,7 +252,7 @@ impl Panel for RfChainPanel {
         ]));
         let body = |t: String| Line::from(vec![Span::raw(" "), Span::styled(t, lbl)]);
         lines.push(body(format!("Signal lands at {adc_peak:.0} dBFS \u{2014} {headroom:.0} dB clip headroom,")));
-        lines.push(body(format!("{:.0} dB above the ADC floor. SNR set at the", (adc_peak - above_floor).abs())));
+        lines.push(body(format!("{:.0} dB above the noise floor. SNR set at the", (adc_peak - above_floor).abs())));
         lines.push(body("front end is preserved.".to_string()));
 
         // Action chips (idle until Step 7 wires auto-gain) + status foot.
