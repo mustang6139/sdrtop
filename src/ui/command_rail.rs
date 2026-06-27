@@ -413,8 +413,8 @@ fn mode_card_lines(mode: RailMode, state: &SdrMetrics, stale: bool,
 
         // BENCH — gain-chain health: clip headroom + a one-word verdict.
         RailMode::Bench => {
-            let power = state.signal.channel_power_dbfs;
-            let headroom = if power.is_finite() { (-power).max(0.0) } else { f32::NAN };
+            let power = state.signal.adc_peak_dbfs;
+            let headroom = if state.radio.hw_streaming { (-power).max(0.0) } else { f32::NAN };
             let sat = state.signal.adc_saturation_pct;
             let (verdict, sev) = chain_verdict(sat, if headroom.is_finite() { headroom } else { 0.0 });
             let vcol = match sev { 2 => theme.status_crit, 1 => theme.status_warn, _ => theme.status_ok };
@@ -746,14 +746,13 @@ impl Panel for CommandRailPanel {
             lines.push(Line::raw(""));
         }
         let total = total_gain(state.radio.lna_gain, state.radio.vga_gain, gm.has_second_stage());
-        // TOTAL gain, plus the clip headroom (how far the in-channel level sits below
-        // full scale) when streaming — same quantity the BENCH lead-card reports.
+        // TOTAL gain, plus the clip headroom (peak headroom, same as RF Diagnostics).
         let mut total_spans = vec![
             Span::raw(" "), lbl("TOTAL"),
             Span::styled(format!("{total} dB"), Style::default().fg(theme.value)),
         ];
-        if active && pwr.is_finite() {
-            let headroom = (-pwr).max(0.0);
+        if active {
+            let headroom = (-state.signal.adc_peak_dbfs).max(0.0);
             total_spans.push(Span::styled("  ·  ".to_string(), Style::default().fg(theme.border_dim)));
             total_spans.push(Span::styled(format!("{headroom:.0} dB headroom"),
                                           Style::default().fg(theme.label)));
