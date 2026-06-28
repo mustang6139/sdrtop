@@ -65,6 +65,29 @@ impl GainModel {
             GainModel::RtlSingle { .. } => "AGC",
         }
     }
+
+    /// Snap stored gains into this model's legal values, returning `(lna, vga)`.
+    /// A config saved on one device family must not apply or display an illegal
+    /// gain on another — e.g. an RTL-SDR tuner's 49 dB on a HackRF LNA that maxes
+    /// at 40, or a HackRF value shown unsnapped on an RTL tuner's discrete table.
+    /// HackRF snaps to its 8 dB LNA / 2 dB VGA steps; a single-tuner device snaps
+    /// the primary gain to the nearest table entry and leaves `vga` untouched.
+    pub fn clamp_gains(&self, lna: u32, vga: u32) -> (u32, u32) {
+        match self {
+            GainModel::HackRf => (
+                (lna.min(40) + 4) / 8 * 8, // nearest 8 dB step within 0..=40
+                (vga.min(62) + 1) / 2 * 2, // nearest 2 dB step within 0..=62
+            ),
+            GainModel::RtlSingle { gain_steps_db } => {
+                let snapped = gain_steps_db
+                    .iter()
+                    .copied()
+                    .min_by_key(|&g| (g as i64 - lna as i64).abs())
+                    .unwrap_or(lna);
+                (snapped, vga)
+            }
+        }
+    }
 }
 
 /// Static description of a device's limits and features — the single source of
@@ -141,4 +164,32 @@ pub trait SdrDevice: Send + Sync {
     fn set_vga_gain(&self, _db: u32) -> anyhow::Result<()> { Ok(()) }
     fn set_amp_enable(&self, _on: bool) -> anyhow::Result<()> { Ok(()) }
     fn set_tuner_agc(&self, _on: bool) -> anyhow::Result<()> { Ok(()) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hackrf_clamp_snaps_to_steps_and_caps() {
+        let g = GainModel::HackRf;
+        // In-range values already on a step are unchanged.
+        assert_eq!(g.clamp_gains(16, 30), (16, 30));
+        // An RTL tuner's 49 dB can't reach a HackRF LNA — caps to 40, a legal step.
+        assert_eq!(g.clamp_gains(49, 100), (40, 62));
+        // Off-step values snap to the nearest 8 dB / 2 dB step.
+        assert_eq!(g.clamp_gains(20, 31), (24, 32));
+        assert_eq!(g.clamp_gains(0, 0), (0, 0));
+    }
+
+    #[test]
+    fn rtl_clamp_snaps_primary_to_table_keeps_vga() {
+        let g = GainModel::RtlSingle { gain_steps_db: vec![0, 9, 16, 24, 49] };
+        // A HackRF LNA value snaps to the nearest tuner-table entry; vga is inert.
+        assert_eq!(g.clamp_gains(20, 40), (16, 40));
+        assert_eq!(g.clamp_gains(100, 0), (49, 0));
+        // An empty table can't snap → the value passes through unchanged.
+        let empty = GainModel::RtlSingle { gain_steps_db: vec![] };
+        assert_eq!(empty.clamp_gains(33, 7), (33, 7));
+    }
 }

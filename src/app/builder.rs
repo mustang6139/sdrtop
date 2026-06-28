@@ -107,6 +107,11 @@ impl App {
         } else {
             caps.default_sample_rate_hz
         };
+        // Snap the stored gains into THIS device's gain model too, so a config from
+        // another device family neither programs an illegal gain nor displays one
+        // (e.g. an RTL tuner's 49 dB on a HackRF LNA). One clamp feeds both the
+        // hardware set and the state below, so they always agree.
+        let (lna_gain, vga_gain) = caps.gain.clamp_gains(cfg.radio.lna_gain, cfg.radio.vga_gain);
 
         let (sr_result, bb_filter_hz) = match device.set_sample_rate(sr) {
             Ok(bw)  => (Ok(()), bw),
@@ -119,8 +124,8 @@ impl App {
         let startup_results = [
             device.set_frequency(freq),
             sr_result,
-            device.set_lna_gain(cfg.radio.lna_gain),
-            device.set_vga_gain(cfg.radio.vga_gain),
+            device.set_lna_gain(lna_gain),
+            device.set_vga_gain(vga_gain),
             device.set_amp_enable(cfg.radio.amp_enabled),
             device.set_tuner_agc(cfg.radio.amp_enabled),
         ];
@@ -131,8 +136,8 @@ impl App {
                 config_sample_rate:  sr,
                 actual_sample_rate:  0,
                 bb_filter_hz,
-                lna_gain:            cfg.radio.lna_gain,
-                vga_gain:            cfg.radio.vga_gain,
+                lna_gain,
+                vga_gain,
                 amp_enabled:         cfg.radio.amp_enabled,
                 rx_enabled:          false,
                 hw_streaming:        false,

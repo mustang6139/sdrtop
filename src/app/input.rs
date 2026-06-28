@@ -926,21 +926,24 @@ fn handle_global(
                 let caps = device.capabilities();
                 let def_freq = caps.default_frequency_hz;
                 let def_sr   = caps.default_sample_rate_hz;
+                // Snap the default gains into this device's gain model so RTL-SDR
+                // lands on a legal tuner step, not HackRF's raw LNA/VGA constants.
+                let (lna_def, vga_def) = caps.gain.clamp_gains(DEFAULT_LNA_GAIN, DEFAULT_VGA_GAIN);
                 let (sr_result, bb_bw) = match device.set_sample_rate(def_sr) {
                     Ok(bw) => (Ok(()), bw),
                     Err(e) => (Err(e), crate::hardware::compute_bb_filter_bw(def_sr)),
                 };
                 let results = [
-                    device.set_lna_gain(DEFAULT_LNA_GAIN),
-                    device.set_vga_gain(DEFAULT_VGA_GAIN),
+                    device.set_lna_gain(lna_def),
+                    device.set_vga_gain(vga_def),
                     device.set_frequency(def_freq),
                     sr_result,
                     device.set_amp_enable(false),
                 ];
                 let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
                 if results.iter().all(|r| r.is_ok()) {
-                    m.radio.lna_gain           = DEFAULT_LNA_GAIN;
-                    m.radio.vga_gain           = DEFAULT_VGA_GAIN;
+                    m.radio.lna_gain           = lna_def;
+                    m.radio.vga_gain           = vga_def;
                     m.radio.amp_enabled        = false;
                     m.lab.rf_autotrack         = false;
                     m.radio.frequency          = def_freq;
