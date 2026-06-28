@@ -115,8 +115,10 @@ impl Panel for TimingDiagnosticsPanel {
         let val = Style::default().fg(theme.value);
         let dim = Style::default().fg(theme.stale);
         let dash = || Span::styled("---".to_string(), dim);
-        // Pad a label to a fixed column so values line up down the zone.
-        let field = |name: &str| Span::styled(format!(" {name:<9}"), lbl);
+        // Pad a label to a fixed column so values line up down the zone. Width 11
+        // clears the longest labels ("Host drift", "Throughput" = 10) and keeps a
+        // separating space, so no value butts up against its label.
+        let field = |name: &str| Span::styled(format!(" {name:<11}"), lbl);
 
         let mut lines: Vec<Line> = Vec::new();
 
