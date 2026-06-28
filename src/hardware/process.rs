@@ -156,6 +156,13 @@ pub fn process_block(
             m.acc.jitter_sum_us += gap_us;
             m.acc.jitter_sq_sum += gap_us.saturating_mul(gap_us);
             m.acc.jitter_count  += 1;
+            // Rolling per-callback gap ring for the lab_timing strip chart. Bounded
+            // FIFO; the poll task only snapshots it, so it stays continuous across
+            // the 200 ms windows the sum/variance accumulators reset on.
+            if m.acc.cb_gaps_us.len() >= crate::state::CB_GAP_HISTORY_LEN {
+                m.acc.cb_gaps_us.pop_front();
+            }
+            m.acc.cb_gaps_us.push_back(gap_us);
         }
         m.acc.last_callback = Some(now);
     }

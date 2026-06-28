@@ -22,12 +22,17 @@ pub use signal::{SignalState, SAT_CLIP_PCT};
 pub use spectrum::{SpectrumMarker, SpectrumState, SpectrumStyle};
 pub use sweep::{SweepConfig, SweepFrame, SweepState, SWEEP_SETTLING_MS};
 pub use system::SystemState;
-pub use timing::{TimingQuality, TimingState, HACKRF_SAMPLES_PER_TRANSFER};
+pub use timing::{TimingQuality, TimingState, HACKRF_SAMPLES_PER_TRANSFER,
+                 DEADLINE_BUDGET_FRAC, DEADLINE_BUDGET_FLOOR_US, STRIP_WINDOW};
 pub use ui::{active_recall_slot, recall_from_hz, recall_to_hz, InputMode, LogLevel,
              RailMode, UiState, RECALL_SLOTS};
 pub use waterfall::{FftFrame, WaterfallState};
 
 pub const THROUGHPUT_HISTORY_LEN: usize = 64;
+/// Depth of the per-callback gap ring feeding the `lab_timing` strip chart. ~256
+/// keeps roughly the last 3 s at the HackRF/RTL callback cadence (~73–76 cb/s),
+/// enough to fill the chart's ~160-column window with headroom.
+pub const CB_GAP_HISTORY_LEN: usize = 256;
 /// SNR/PWR/NF history depth — 120 samples at the 500 ms push cadence = 60 s window.
 /// Must be ≥ 2 × max scope_top_w so the braille mini-scope fills completely.
 pub const SNR_HISTORY_LEN: usize = 120;

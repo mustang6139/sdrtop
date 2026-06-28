@@ -12,6 +12,19 @@
 /// expected callback period is this many samples divided by the sample rate.
 pub const HACKRF_SAMPLES_PER_TRANSFER: u64 = 131_072;
 
+/// Fraction of the expected callback period allowed before a callback counts as
+/// "late". ~0.046 lands the deadline band at ~600 µs around the 13.107 ms period
+/// of a 10 Msps HackRF stream, and scales honestly at every other sample rate.
+pub const DEADLINE_BUDGET_FRAC: f64 = 0.046;
+
+/// Floor for the deadline budget (µs) so very high sample rates keep a usable
+/// band rather than collapsing it to nothing.
+pub const DEADLINE_BUDGET_FLOOR_US: u64 = 150;
+
+/// Number of most-recent callbacks the strip chart shows and the late count is
+/// measured over (~2.1 s at the HackRF/RTL cadence).
+pub const STRIP_WINDOW: usize = 160;
+
 /// One-glance verdict on stream timing. Ordered best → worst.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum TimingQuality {
@@ -89,6 +102,24 @@ pub struct TimingState {
     pub throughput_mean_mbps: f64,
     pub throughput_std_mbps:  f64,
     pub timing_quality:       TimingQuality,
+
+    // ── Per-callback deadline view (drives the lab_timing strip chart) ──────────
+    /// Signed per-callback deviation from the expected period (µs), newest last.
+    /// Snapshot of the hot-path gap ring; the strip chart plots this directly.
+    pub cb_deviations_us:     Vec<i32>,
+    /// Late-callback deadline budget for this sample rate (µs), proportional to
+    /// the expected period (see [`DEADLINE_BUDGET_FRAC`]).
+    pub deadline_budget_us:   u64,
+    /// Callbacks in the shown window whose |deviation| exceeded the budget.
+    pub late_callbacks:       u32,
+    /// Window size the late count was measured over (denominator for "n / N").
+    pub late_window:          u32,
+    /// Percentiles / peak of the *absolute per-callback deviation* over the shown
+    /// window (µs) — the "how late do callbacks actually get" figures, distinct
+    /// from the per-window jitter-rms percentiles above.
+    pub dev_p95_us:           u64,
+    pub dev_p99_us:           u64,
+    pub dev_peak_us:          u64,
 }
 
 impl TimingState {
@@ -101,6 +132,7 @@ impl TimingState {
         config_sample_rate: f64,
         samples_per_transfer: u64,
         jitter: &[u64],
+        cb_gaps: &[u64],
         cb_jitter_us: u64,
         actual_sample_rate: u32,
         drops_per_sec: u64,
@@ -126,6 +158,30 @@ impl TimingState {
             0
         };
         let timing_quality = TimingQuality::classify(jitter_p99_us, cb_period_expected, sr_delta_ppm, drops_per_sec);
+
+        // ── Per-callback deadline view ──────────────────────────────────────────
+        // Budget scales with the expected period (floored), so "late" means the
+        // same proportional slip at any sample rate. Deviations, the late count,
+        // and the |deviation| percentiles are all measured over the shown window.
+        let deadline_budget_us = if cb_period_expected > 0 {
+            ((DEADLINE_BUDGET_FRAC * cb_period_expected as f64).round() as u64)
+                .max(DEADLINE_BUDGET_FLOOR_US)
+        } else {
+            DEADLINE_BUDGET_FLOOR_US
+        };
+        let win_start = cb_gaps.len().saturating_sub(STRIP_WINDOW);
+        let cb_deviations_us: Vec<i32> = cb_gaps[win_start..]
+            .iter()
+            .map(|&g| (g as i64 - cb_period_expected as i64)
+                .clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+            .collect();
+        let late_window = cb_deviations_us.len() as u32;
+        let abs_dev: Vec<u64> = cb_deviations_us.iter().map(|&d| d.unsigned_abs() as u64).collect();
+        let late_callbacks = abs_dev.iter().filter(|&&d| d > deadline_budget_us).count() as u32;
+        let dev_p95_us  = percentile_u64(&abs_dev, 95.0);
+        let dev_p99_us  = percentile_u64(&abs_dev, 99.0);
+        let dev_peak_us = abs_dev.iter().copied().max().unwrap_or(0);
+
         Self {
             cb_period_us,
             cb_period_expected,
@@ -141,6 +197,13 @@ impl TimingState {
             throughput_mean_mbps,
             throughput_std_mbps,
             timing_quality,
+            cb_deviations_us,
+            deadline_budget_us,
+            late_callbacks,
+            late_window,
+            dev_p95_us,
+            dev_p99_us,
+            dev_peak_us,
         }
     }
 }
@@ -178,14 +241,14 @@ mod tests {
     #[test]
     fn expected_period_scales_with_transfer_size() {
         // RTL-SDR: 8192 pairs / 2.4 Msps ≈ 3413 µs (vs HackRF's 131072-pair transfer).
-        let t = TimingState::compute(3_400, 2_400_000.0, 8_192, &[10], 10, 2_400_000, 0, 4.5, 0.1);
+        let t = TimingState::compute(3_400, 2_400_000.0, 8_192, &[10], &[], 10, 2_400_000, 0, 4.5, 0.1);
         assert_eq!(t.cb_period_expected, 3_413);
     }
 
     #[test]
     fn expected_period_from_sample_rate() {
         // 10 Msps → 131072 / 10e6 = 13107.2 µs ≈ 13107.
-        let t = TimingState::compute(13_100, 10_000_000.0, HACKRF_SAMPLES_PER_TRANSFER, &[40, 50, 60], 50, 10_000_000, 0, 19.5, 0.2);
+        let t = TimingState::compute(13_100, 10_000_000.0, HACKRF_SAMPLES_PER_TRANSFER, &[40, 50, 60], &[], 50, 10_000_000, 0, 19.5, 0.2);
         assert_eq!(t.cb_period_expected, 13_107);
         // Measured slightly under expected → negative ppm.
         assert!(t.cb_period_delta_ppm < 0, "got {}", t.cb_period_delta_ppm);
@@ -194,13 +257,13 @@ mod tests {
     #[test]
     fn sr_delta_ppm_sign_and_magnitude() {
         // actual 9.998 MHz vs configured 10.000 MHz → -200 ppm.
-        let t = TimingState::compute(13_107, 10_000_000.0, HACKRF_SAMPLES_PER_TRANSFER, &[10], 10, 9_998_000, 0, 19.5, 0.2);
+        let t = TimingState::compute(13_107, 10_000_000.0, HACKRF_SAMPLES_PER_TRANSFER, &[10], &[], 10, 9_998_000, 0, 19.5, 0.2);
         assert_eq!(t.sr_delta_ppm, -200);
     }
 
     #[test]
     fn no_data_is_excellent_not_alarming() {
-        let t = TimingState::compute(0, 0.0, HACKRF_SAMPLES_PER_TRANSFER, &[], 0, 0, 0, 0.0, 0.0);
+        let t = TimingState::compute(0, 0.0, HACKRF_SAMPLES_PER_TRANSFER, &[], &[], 0, 0, 0, 0.0, 0.0);
         assert_eq!(t.cb_period_expected, 0);
         assert_eq!(t.timing_quality, TimingQuality::Excellent);
     }
@@ -224,9 +287,39 @@ mod tests {
     #[test]
     fn jitter_percentiles_populated() {
         let jitter = [10u64, 20, 30, 40, 200];
-        let t = TimingState::compute(13_107, 10_000_000.0, HACKRF_SAMPLES_PER_TRANSFER, &jitter, 35, 10_000_000, 0, 19.5, 0.2);
+        let t = TimingState::compute(13_107, 10_000_000.0, HACKRF_SAMPLES_PER_TRANSFER, &jitter, &[], 35, 10_000_000, 0, 19.5, 0.2);
         assert_eq!(t.jitter_max_us, 200);
         assert!(t.jitter_p95_us >= t.jitter_p95_us.min(t.jitter_p99_us));
         assert_eq!(t.jitter_p99_us, 200);
+    }
+
+    #[test]
+    fn deadline_view_budget_late_count_and_percentiles() {
+        let exp = 13_107u64;
+        // Budget ≈ 0.046 * 13107 ≈ 603 µs.
+        // Gaps: four on time (small deviation), one early, two very late.
+        let gaps = [
+            exp + 50,   // dev +50   (in budget)
+            exp - 40,   // dev -40   (in budget)
+            exp + 700,  // dev +700  (late)
+            exp + 120,  // dev +120  (in budget)
+            exp - 6300, // dev -6300 (late, early spike)
+        ];
+        let t = TimingState::compute(
+            exp, 10_000_000.0, HACKRF_SAMPLES_PER_TRANSFER, &[], &gaps,
+            50, 10_000_000, 0, 19.5, 0.2);
+        assert_eq!(t.deadline_budget_us, 603, "budget = round(0.046 * 13107)");
+        // Signed deviations preserved, newest last, early spike negative.
+        assert_eq!(t.cb_deviations_us, vec![50, -40, 700, 120, -6300]);
+        assert_eq!(t.late_window, 5);
+        assert_eq!(t.late_callbacks, 2, "only the +700 and -6300 exceed the budget");
+        assert_eq!(t.dev_peak_us, 6300, "peak is over the absolute deviation");
+    }
+
+    #[test]
+    fn deadline_view_floor_when_no_period() {
+        // No configured rate → budget falls back to the floor, never zero.
+        let t = TimingState::compute(0, 0.0, HACKRF_SAMPLES_PER_TRANSFER, &[], &[100, 200], 0, 0, 0, 0.0, 0.0);
+        assert_eq!(t.deadline_budget_us, DEADLINE_BUDGET_FLOOR_US);
     }
 }

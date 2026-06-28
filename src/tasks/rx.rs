@@ -309,6 +309,9 @@ pub fn spawn_rx_task(
                 }
                 let tp_std = if tp_count > 1 { (tp_m2 / (tp_count - 1) as f64).sqrt() } else { 0.0 };
                 let jitter_snapshot: Vec<u64> = m.iq.jitter_history.iter().copied().collect();
+                // Snapshot the rolling per-callback gap ring for the strip chart;
+                // deviation / late-count / percentiles are derived in `compute`.
+                let gaps_snapshot: Vec<u64> = m.acc.cb_gaps_us.iter().copied().collect();
                 // Carry the session jitter peak across the wholesale rebuild — it is
                 // reset on RX start and by the timing panel's [R] focus binding.
                 let prev_peak = m.timing.jitter_session_max_us;
@@ -317,6 +320,7 @@ pub fn spawn_rx_task(
                     m.radio.config_sample_rate,
                     device.capabilities().samples_per_transfer,
                     &jitter_snapshot,
+                    &gaps_snapshot,
                     m.iq.cb_jitter_us,
                     m.radio.actual_sample_rate,
                     m.signal.drops_per_sec,
