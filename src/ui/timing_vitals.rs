@@ -235,7 +235,7 @@ impl Panel for TimingVitalsPanel {
             lines.push(Line::from(spans));
         }
 
-        crate::ui::chrome::collapse_spacers(&mut lines, inner.height as usize);
+        crate::ui::chrome::fit_spacers(&mut lines, inner.height as usize);
         f.render_widget(Paragraph::new(lines), inner);
     }
 }

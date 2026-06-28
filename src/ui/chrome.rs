@@ -134,6 +134,37 @@ pub fn collapse_spacers(lines: &mut Vec<Line<'_>>, avail: usize) {
     lines.retain(|_| { let keep = !drop.contains(&i); i += 1; keep });
 }
 
+/// The filling counterpart to [`collapse_spacers`]: when an airy stack is *shorter*
+/// than `avail`, grow its existing blank spacers so the content spreads to use the
+/// whole panel instead of bunching at the top and stranding empty rows at the foot.
+/// The leftover rows are distributed evenly across the current blank positions, so
+/// every gap opens up by a balanced amount. No-op when the stack already fills (or
+/// overflows) `avail`, or when it has no blank spacers to grow.
+pub fn pad_to_fill(lines: &mut Vec<Line<'_>>, avail: usize) {
+    if lines.len() >= avail { return; }
+    let blank_idx: Vec<usize> = lines.iter().enumerate()
+        .filter(|(_, l)| l.spans.iter().all(|s| s.content.trim().is_empty()))
+        .map(|(i, _)| i)
+        .collect();
+    if blank_idx.is_empty() { return; }
+    let extra = avail - lines.len();
+    // How many blank rows to add at each existing spacer, spread evenly.
+    let mut add = vec![0usize; blank_idx.len()];
+    for k in 0..extra { add[k * blank_idx.len() / extra] += 1; }
+    // Insert from the back so earlier indices stay valid.
+    for (&bi, &n) in blank_idx.iter().zip(add.iter()).rev() {
+        for _ in 0..n { lines.insert(bi, Line::raw("")); }
+    }
+}
+
+/// Fit an airy `lines` stack to exactly `avail` rows: drop spacers when it
+/// overflows, grow them when it underflows. The one call a panel makes to both
+/// breathe and fill across every terminal height.
+pub fn fit_spacers(lines: &mut Vec<Line<'_>>, avail: usize) {
+    collapse_spacers(lines, avail);
+    pad_to_fill(lines, avail);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,6 +191,32 @@ mod tests {
         // Overflow of 2 → drop 2 spacers, spread across the list (not the first two).
         let drop = spacers_to_drop(20, &blanks, 18);
         assert_eq!(drop, vec![3, 9], "evenly spaced: 1st and 4th spacer");
+    }
+
+    #[test]
+    fn pad_to_fill_grows_spacers_to_use_height() {
+        use ratatui::text::Span;
+        // content rows at 0,2,4 with blank spacers at 1,3 → 5 lines into 9 rows.
+        let mut lines = vec![
+            Line::from(Span::raw("a")), Line::raw(""),
+            Line::from(Span::raw("b")), Line::raw(""),
+            Line::from(Span::raw("c")),
+        ];
+        pad_to_fill(&mut lines, 9);
+        assert_eq!(lines.len(), 9, "stack grows to fill the panel");
+        // Extra rows land in the two gaps, evenly (2 each here).
+        assert!(lines[1].spans.iter().all(|s| s.content.trim().is_empty()));
+    }
+
+    #[test]
+    fn pad_to_fill_noop_when_full_or_no_spacers() {
+        use ratatui::text::Span;
+        let mut full = vec![Line::from(Span::raw("a")), Line::raw(""), Line::from(Span::raw("b"))];
+        pad_to_fill(&mut full, 3);
+        assert_eq!(full.len(), 3, "already fills → unchanged");
+        let mut no_blanks = vec![Line::from(Span::raw("a")), Line::from(Span::raw("b"))];
+        pad_to_fill(&mut no_blanks, 10);
+        assert_eq!(no_blanks.len(), 2, "no spacers to grow → unchanged");
     }
 
     #[test]

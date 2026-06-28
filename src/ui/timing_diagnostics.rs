@@ -162,7 +162,8 @@ impl Panel for TimingDiagnosticsPanel {
         // ── DEADLINE BUDGET ─────────────────────────────────────────────────────
         let budget = t.deadline_budget_us;
         lines.push(section("DEADLINE BUDGET", &format!("\u{250A} = \u{00b1}{} \u{00b5}s", budget), iw, theme));
-        for (name, v) in [("p95", t.dev_p95_us), ("p99", t.dev_p99_us), ("peak", t.dev_peak_us)] {
+        let bars = [("p95", t.dev_p95_us), ("p99", t.dev_p99_us), ("peak", t.dev_peak_us)];
+        for (i, (name, v)) in bars.iter().enumerate() {
             let value_str = format!("{} \u{00b5}s", v);
             // lead(1) + label(4) + gap(1) + bar + gap(1) + value
             let bar_w = iw.saturating_sub(1 + 4 + 1 + 1 + value_str.chars().count()).max(6);
@@ -170,10 +171,12 @@ impl Panel for TimingDiagnosticsPanel {
             if stale {
                 spans.push(dash());
             } else {
-                spans.extend(budget_bar(v, budget, bar_w, theme));
+                spans.extend(budget_bar(*v, budget, bar_w, theme));
                 spans.push(Span::styled(format!(" {value_str}"), val));
             }
             lines.push(Line::from(spans));
+            // Breathing row between the bars so they never read as one block.
+            if i < bars.len() - 1 { lines.push(Line::raw("")); }
         }
         lines.push(Line::from(if stale {
             vec![field("late"), dash()]
@@ -238,7 +241,7 @@ impl Panel for TimingDiagnosticsPanel {
             ]));
         }
 
-        crate::ui::chrome::collapse_spacers(&mut lines, inner.height as usize);
+        crate::ui::chrome::fit_spacers(&mut lines, inner.height as usize);
         f.render_widget(Paragraph::new(lines), inner);
     }
 }
