@@ -1022,7 +1022,14 @@ fn handle_global(
                 let result = device.set_lna_gain(new_gain);
                 let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
                 match result {
-                    Ok(()) => { m.radio.lna_gain = new_gain; m.lab.rf_autotrack = false; m.ui.note_mode_action(RailMode::Bench); m.push_log(format!("{} gain → {} dB", primary_gain_label(gain), new_gain)); }
+                    Ok(()) => {
+                        m.radio.lna_gain = new_gain;
+                        // On a single-tuner device, setting a manual gain turns the
+                        // tuner AGC off in hardware — keep the UI's AGC flag in sync.
+                        if gain.is_single() { m.radio.amp_enabled = false; }
+                        m.lab.rf_autotrack = false; m.ui.note_mode_action(RailMode::Bench);
+                        m.push_log(format!("{} gain → {} dB", primary_gain_label(gain), new_gain));
+                    }
                     Err(e) => m.push_log(format!("Gain error: {}", e)),
                 }
             }
@@ -1035,7 +1042,14 @@ fn handle_global(
                 let result = device.set_lna_gain(new_gain);
                 let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
                 match result {
-                    Ok(()) => { m.radio.lna_gain = new_gain; m.lab.rf_autotrack = false; m.ui.note_mode_action(RailMode::Bench); m.push_log(format!("{} gain → {} dB", primary_gain_label(gain), new_gain)); }
+                    Ok(()) => {
+                        m.radio.lna_gain = new_gain;
+                        // On a single-tuner device, setting a manual gain turns the
+                        // tuner AGC off in hardware — keep the UI's AGC flag in sync.
+                        if gain.is_single() { m.radio.amp_enabled = false; }
+                        m.lab.rf_autotrack = false; m.ui.note_mode_action(RailMode::Bench);
+                        m.push_log(format!("{} gain → {} dB", primary_gain_label(gain), new_gain));
+                    }
                     Err(e) => m.push_log(format!("Gain error: {}", e)),
                 }
             }
