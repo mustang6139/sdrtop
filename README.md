@@ -44,7 +44,9 @@ It's a one-person project built in my spare time, and honestly, I made it for *y
 ## Gallery
 
 <p align="center">
-  <img src="user_docs/pics/video.gif" width="100%" alt="sdrtop in motion">
+  <video src="user_docs/pics/hackrf/video.mp4" width="100%" controls muted loop playsinline poster="user_docs/pics/hackrf/command_rail.png">
+    <a href="user_docs/pics/hackrf/video.mp4">sdrtop in motion</a>
+  </video>
 </p>
 
 *It's a terminal app, so brace yourself for the visual spectacle of monospace text in color. The only special effects are honest dBFS numbers.*
@@ -56,8 +58,16 @@ Screenshots, split by device. More to come. Got a clean capture on your hardware
   <br>
   <table>
     <tr>
-      <td width="50%"><img src="user_docs/pics/command_rail.png" alt="HackRF - spectrum & waterfall"></td>
-      <td width="50%"><img src="user_docs/pics/lab_iq.png" alt="HackRF - lab presets"></td>
+      <td width="50%"><img src="user_docs/pics/hackrf/command_rail.png" alt="HackRF - Command Rail cockpit"></td>
+      <td width="50%"><img src="user_docs/pics/hackrf/spectrum.png" alt="HackRF - spectrum & waterfall"></td>
+    </tr>
+    <tr>
+      <td width="50%"><img src="user_docs/pics/hackrf/lab_iq.png" alt="HackRF - IQ diagnostics lab"></td>
+      <td width="50%"><img src="user_docs/pics/hackrf/lab_rf.png" alt="HackRF - RF chain lab"></td>
+    </tr>
+    <tr>
+      <td width="50%"><img src="user_docs/pics/hackrf/lab_timing.png" alt="HackRF - timing lab"></td>
+      <td width="50%"></td>
     </tr>
   </table>
 </details>
