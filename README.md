@@ -44,9 +44,11 @@ It's a one-person project built in my spare time, and honestly, I made it for *y
 ## Gallery
 
 <p align="center">
-  <video src="user_docs/pics/hackrf/video.mp4" width="100%" controls muted loop playsinline poster="user_docs/pics/hackrf/command_rail.png">
-    <a href="user_docs/pics/hackrf/video.mp4">sdrtop in motion</a>
-  </video>
+  <a href="user_docs/pics/hackrf/video.mp4">
+    <img src="user_docs/pics/hackrf/command_rail.png" width="100%" alt="sdrtop in motion - click to watch the demo video">
+  </a>
+  <br>
+  <sub>▶ click the screenshot to play the demo video</sub>
 </p>
 
 *It's a terminal app, so brace yourself for the visual spectacle of monospace text in color. The only special effects are honest dBFS numbers.*
@@ -66,8 +68,7 @@ Screenshots, split by device. More to come. Got a clean capture on your hardware
       <td width="50%"><img src="user_docs/pics/hackrf/lab_rf.png" alt="HackRF - RF chain lab"></td>
     </tr>
     <tr>
-      <td width="50%"><img src="user_docs/pics/hackrf/lab_timing.png" alt="HackRF - timing lab"></td>
-      <td width="50%"></td>
+      <td width="100%" colspan="2"><img src="user_docs/pics/hackrf/lab_timing.png" alt="HackRF - timing lab"></td>
     </tr>
   </table>
 </details>
