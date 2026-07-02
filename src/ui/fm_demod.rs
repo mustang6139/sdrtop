@@ -44,10 +44,22 @@ impl Panel for FmDemodPanel {
         f.render_widget(block, area);
         if inner.width == 0 || inner.height == 0 { return; }
 
-        f.render_widget(
-            Paragraph::new(Line::from(Span::styled(" \u{2026}", Style::default().fg(theme.stale)))),
-            inner,
-        );
+        // Skeleton: the demod zone nameplates Phase 2/3 fill in. Uses the shared
+        // `chrome::section` so it reads in the same family as the other lab rails.
+        let iw = inner.width as usize;
+        let mut lines: Vec<Line> = Vec::new();
+        for (name, hint) in [
+            ("MPX BASEBAND", "0-57 kHz"),
+            ("PILOT / STEREO", "19 kHz"),
+            ("DEVIATION", "75 kHz max"),
+            ("RDS", "57 kHz"),
+            ("AUDIO", ""),
+        ] {
+            lines.push(crate::ui::chrome::section(name, hint, iw, theme));
+            lines.push(Line::raw(""));
+        }
+        crate::ui::chrome::fit_spacers(&mut lines, inner.height as usize);
+        f.render_widget(Paragraph::new(lines), inner);
     }
 }
 

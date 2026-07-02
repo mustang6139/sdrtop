@@ -32,27 +32,6 @@ pub struct TimingDiagnosticsPanel;
 /// Inline trend sparkline width.
 const SPARK_W: usize = 18;
 
-/// `├╴ SECTION ╶──── hint` nameplate — the shared lab side-panel subheading style
-/// (identical to lab_iq / lab_rf), so every lab pane groups its zones the same way.
-/// `hint` is owned, so the right annotation can carry a live value (the budget).
-fn section(name: &str, hint: &str, iw: usize, theme: &crate::Theme) -> Line<'static> {
-    let dim = theme.border_dim;
-    let label = name.to_uppercase();
-    let left = label.chars().count() + 5;
-    let hint_w = if hint.is_empty() { 0 } else { hint.chars().count() + 1 };
-    let dashes = iw.saturating_sub(left + hint_w);
-    let mut spans = vec![
-        Span::styled("\u{251c}\u{2574} ".to_string(), Style::default().fg(dim)),
-        Span::styled(label, Style::default().fg(theme.label).add_modifier(Modifier::BOLD)),
-        Span::styled(" \u{2576}".to_string(), Style::default().fg(dim)),
-        Span::styled("\u{2500}".repeat(dashes), Style::default().fg(dim)),
-    ];
-    if !hint.is_empty() {
-        spans.push(Span::styled(format!(" {hint}"), Style::default().fg(dim)));
-    }
-    Line::from(spans)
-}
-
 /// One deadline-budget bar in the shared lab bar language: a `gain_bar_colored`
 /// ⅛-block fill graded green→red across `bar_w`, with the budget marker `┊`
 /// overlaid at mid-bar (full scale = 2 × budget, so the tick sits at the centre
@@ -127,12 +106,12 @@ impl Panel for TimingDiagnosticsPanel {
         // Pad a label to a fixed column so values line up down the zone. Width 11
         // clears the longest labels ("Host drift", "Throughput" = 10) and keeps a
         // separating space, so no value butts up against its label.
-        let field = |name: &str| Span::styled(format!(" {name:<11}"), lbl);
+        let field = |name: &str| crate::ui::chrome::field(name, 11, theme);
 
         let mut lines: Vec<Line> = Vec::new();
 
         // ── CALLBACK TIMING ─────────────────────────────────────────────────────
-        lines.push(section("CALLBACK TIMING", "RX stream", iw, theme));
+        lines.push(crate::ui::chrome::section("CALLBACK TIMING", "RX stream", iw, theme));
         lines.push(Line::from(if stale || t.cb_period_us == 0 {
             vec![field("Period"), dash()]
         } else {
@@ -172,7 +151,7 @@ impl Panel for TimingDiagnosticsPanel {
 
         // ── DEADLINE BUDGET ─────────────────────────────────────────────────────
         let budget = t.deadline_budget_us;
-        lines.push(section("DEADLINE BUDGET", &format!("\u{250A} = \u{00b1}{} \u{00b5}s", budget), iw, theme));
+        lines.push(crate::ui::chrome::section("DEADLINE BUDGET", &format!("\u{250A} = \u{00b1}{} \u{00b5}s", budget), iw, theme));
         let bars = [("p95", t.dev_p95_us), ("p99", t.dev_p99_us), ("peak", t.dev_peak_us)];
         for (i, (name, v)) in bars.iter().enumerate() {
             let value_str = format!("{} \u{00b5}s", v);
@@ -201,7 +180,7 @@ impl Panel for TimingDiagnosticsPanel {
         lines.push(Line::raw(""));
 
         // ── SAMPLE RATE ─────────────────────────────────────────────────────────
-        lines.push(section("SAMPLE RATE", "clock integrity", iw, theme));
+        lines.push(crate::ui::chrome::section("SAMPLE RATE", "clock integrity", iw, theme));
         let cfg_msps = state.radio.config_sample_rate / 1_000_000.0;
         lines.push(Line::from(if stale || state.radio.actual_sample_rate == 0 {
             vec![field("Rate"), Span::styled(format!("{cfg_msps:.3} MHz"), val), Span::raw("  "), dash()]

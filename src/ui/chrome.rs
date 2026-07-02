@@ -100,6 +100,40 @@ pub fn title<'a>(text: &str, label_color: Color, tick_color: Color) -> Line<'a> 
     Line::from(nameplate(vec![label(text, label_color)], tick_color))
 }
 
+/// `├╴ SECTION ╶──── hint` — the shared lab side-panel subheading, spanning the
+/// full inner width `iw`: a `├╴` tick tab, the uppercased bold label, a `╶` cap,
+/// a dim dashed rule filling the middle, and an optional right-aligned `hint`.
+///
+/// This is the one nameplate every lab side panel (`iq_diagnostics`, `rf_chain`,
+/// `timing_diagnostics`, `signal_characterization`, `fm_demod`) groups its zones
+/// with, so they read as one instrument family. `hint` is owned so it can carry a
+/// live value.
+pub fn section(name: &str, hint: &str, iw: usize, theme: &crate::Theme) -> Line<'static> {
+    let dim = theme.border_dim;
+    let label_txt = name.to_uppercase();
+    let left = label_txt.chars().count() + 5;
+    let hint_w = if hint.is_empty() { 0 } else { hint.chars().count() + 1 };
+    let dashes = iw.saturating_sub(left + hint_w);
+    let mut spans = vec![
+        Span::styled("\u{251c}\u{2574} ".to_string(), Style::default().fg(dim)),
+        Span::styled(label_txt, Style::default().fg(theme.label).add_modifier(Modifier::BOLD)),
+        Span::styled(" \u{2576}".to_string(), Style::default().fg(dim)),
+        Span::styled("\u{2500}".repeat(dashes), Style::default().fg(dim)),
+    ];
+    if !hint.is_empty() {
+        spans.push(Span::styled(format!(" {hint}"), Style::default().fg(dim)));
+    }
+    Line::from(spans)
+}
+
+/// A label cell for a side panel's `label : value` rows: a leading space then the
+/// name left-padded to `width`, in `theme.label`, so values line up down the zone.
+/// Pair with the value span the caller appends. Shared so every lab panel uses the
+/// same column rhythm; each panel picks the `width` that clears its longest label.
+pub fn field(name: &str, width: usize, theme: &crate::Theme) -> Span<'static> {
+    Span::styled(format!(" {name:<width$}"), Style::default().fg(theme.label))
+}
+
 /// Which blank-spacer indices to drop so an airy stack of `total` lines fits
 /// `avail` rows. `blank_idx` lists the indices (into the full line list) of the
 /// droppable spacer rows, in order.
@@ -168,6 +202,29 @@ pub fn fit_spacers(lines: &mut Vec<Line<'_>>, avail: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn section_fills_full_inner_width() {
+        let t = crate::theme::Theme::sdr();
+        // With and without a hint, the dashed rule stretches the line to exactly iw.
+        let plain = super::section("CALLBACK TIMING", "", 40, &t);
+        let w: usize = plain.spans.iter().map(|s| s.content.chars().count()).sum();
+        assert_eq!(w, 40, "section must span the full inner width");
+        let hinted = super::section("DEADLINE BUDGET", "\u{250a} = \u{00b1}600 \u{00b5}s", 44, &t);
+        let w: usize = hinted.spans.iter().map(|s| s.content.chars().count()).sum();
+        assert_eq!(w, 44, "hinted section still spans the full inner width");
+        // Label is uppercased.
+        assert!(hinted.spans.iter().any(|s| s.content == "DEADLINE BUDGET"));
+    }
+
+    #[test]
+    fn field_leading_space_and_left_padded() {
+        let t = crate::theme::Theme::sdr();
+        let s = super::field("Rate", 11, &t);
+        assert_eq!(s.content.chars().count(), 12, "1 lead space + 11-wide label");
+        assert!(s.content.starts_with(" Rate"));
+        assert!(s.content.ends_with("       "), "short label is right-padded with spaces");
+    }
 
     #[test]
     fn spacers_to_drop_keeps_all_when_it_fits() {

@@ -45,26 +45,6 @@ fn threshold_color(value: f64, warn: f64, crit: f64, theme: &crate::Theme) -> Co
     if value >= crit { theme.status_crit } else if value >= warn { theme.status_warn } else { theme.status_ok }
 }
 
-/// `├╴ SECTION ╶──── hint` nameplate — the shared lab side-panel subheading style
-/// (identical to lab_iq / lab_rf), so every lab pane groups its zones the same way.
-fn section(name: &str, hint: &str, iw: usize, theme: &crate::Theme) -> Line<'static> {
-    let dim = theme.border_dim;
-    let label = name.to_uppercase();
-    let left = label.chars().count() + 5;
-    let hint_w = if hint.is_empty() { 0 } else { hint.chars().count() + 1 };
-    let dashes = iw.saturating_sub(left + hint_w);
-    let mut spans = vec![
-        Span::styled("\u{251c}\u{2574} ".to_string(), Style::default().fg(dim)),
-        Span::styled(label, Style::default().fg(theme.label).add_modifier(Modifier::BOLD)),
-        Span::styled(" \u{2576}".to_string(), Style::default().fg(dim)),
-        Span::styled("\u{2500}".repeat(dashes), Style::default().fg(dim)),
-    ];
-    if !hint.is_empty() {
-        spans.push(Span::styled(format!(" {hint}"), Style::default().fg(dim)));
-    }
-    Line::from(spans)
-}
-
 impl Panel for TimingVitalsPanel {
     fn name(&self) -> &'static str { "timing_vitals" }
     fn min_size(&self) -> (u16, u16) { (30, 18) }
@@ -167,7 +147,7 @@ impl Panel for TimingVitalsPanel {
         lines.push(Line::raw(""));
 
         // ── USB link ────────────────────────────────────────────────────────────
-        lines.push(section("USB LINK", "bulk transfer", iw, theme));
+        lines.push(crate::ui::chrome::section("USB LINK", "bulk transfer", iw, theme));
         let usb_recent: u64 = state.signal.usb_error_history.iter().sum();
         let ucol = if usb_recent > 0 { theme.status_crit }
                    else if state.signal.usb_errors_session > 0 { theme.status_warn }
@@ -194,7 +174,7 @@ impl Panel for TimingVitalsPanel {
         lines.push(Line::raw(""));
 
         // ── Ring buffer ─────────────────────────────────────────────────────────
-        lines.push(section("RING BUFFER", "overrun margin", iw, theme));
+        lines.push(crate::ui::chrome::section("RING BUFFER", "overrun margin", iw, theme));
         let fill = state.iq.buf_fill_pct as f64;
         let fcol = buf_color(state.iq.buf_fill_pct, theme);
         lines.push(bar_row("fill depth", fill / 100.0, format!("{fill:.0}%"),
