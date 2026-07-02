@@ -105,13 +105,21 @@ impl Panel for SignalCharacterizationPanel {
         if let Some(fr) = frame.filter(|_| !stale) {
             let snr = fr.peak_to_nf_db;
             let col = snr_color(snr, theme);
-            lines.push(Line::from(vec![
+            let mut hspans = vec![
                 Span::raw(" "),
                 Span::styled(format!("{snr:.1}"), Style::default().fg(col).add_modifier(Modifier::BOLD)),
                 Span::styled(" dB", val),
                 Span::styled("  peak / noise", dim),
-                Span::styled("   \u{25cf}", Style::default().fg(col)),
-            ]));
+            ];
+            // MOD badge — the classifier's estimate of what's at centre.
+            if state.signal.modulation.is_known() {
+                hspans.push(Span::styled(
+                    format!("   {}", state.signal.modulation.label()),
+                    Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD),
+                ));
+            }
+            hspans.push(Span::styled("   \u{25cf}", Style::default().fg(col)));
+            lines.push(Line::from(hspans));
         } else {
             lines.push(Line::from(vec![
                 Span::raw(" "),

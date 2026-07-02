@@ -210,6 +210,7 @@ impl FftWorker {
                     m.signal.peak_to_nf_db      = peak_to_nf_db;
                     m.signal.channel_power_dbfs = channel_power_dbfs;
                     m.signal.occupied_bw_hz     = occupied_bw_hz;
+                    m.signal.modulation         = crate::state::classify(peak_to_nf_db, occupied_bw_hz);
 
                     // Per-marker occupied BW within each marker's channel window
                     if sample_rate > 0.0 {

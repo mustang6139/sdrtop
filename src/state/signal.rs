@@ -5,6 +5,58 @@ use std::collections::VecDeque;
 /// worth remembering, not measurement noise.
 pub const SAT_CLIP_PCT: f32 = 10.0;
 
+/// A rough modulation estimate for the signal at centre. Honest by design: a
+/// bandwidth heuristic (see [`classify`]), not a demodulating classifier. The
+/// demod phase refines it (e.g. WFM confirmed by a 19 kHz pilot lock).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Modulation {
+    /// No clear carrier to characterize (weak signal), or a shape that does not
+    /// fit the known bands.
+    #[default]
+    Unknown,
+    /// Wide-band FM broadcast (~180 kHz occupied).
+    Wfm,
+    /// Narrow-band FM voice / data (~11–30 kHz).
+    Nfm,
+    /// Amplitude modulation / narrow voice (< 11 kHz).
+    Am,
+}
+
+impl Modulation {
+    /// Short badge label for the banner / headline: `WFM` / `NFM` / `AM` / `—`.
+    pub fn label(self) -> &'static str {
+        match self {
+            Modulation::Wfm     => "WFM",
+            Modulation::Nfm     => "NFM",
+            Modulation::Am      => "AM",
+            Modulation::Unknown => "\u{2014}",
+        }
+    }
+
+    /// Whether a modulation was confidently classified (not the no-signal fallback).
+    pub fn is_known(self) -> bool { !matches!(self, Modulation::Unknown) }
+}
+
+/// Minimum peak-to-noise (dB) for [`classify`] to commit to a modulation. Below
+/// this there is no clear carrier at centre, so it reports [`Modulation::Unknown`]
+/// rather than labelling noise.
+pub const CLASSIFY_MIN_SNR_DB: f32 = 10.0;
+
+/// Estimate the modulation of the signal at centre from its 99% occupied
+/// bandwidth, gated on signal presence. Deliberately conservative: a bandwidth
+/// heuristic, so the wide/narrow split is trustworthy while the AM vs NFM boundary
+/// is a best guess the demod phase can sharpen.
+pub fn classify(snr_db: f32, occupied_bw_hz: u64) -> Modulation {
+    if snr_db < CLASSIFY_MIN_SNR_DB || occupied_bw_hz == 0 {
+        return Modulation::Unknown;
+    }
+    match occupied_bw_hz {
+        bw if bw >= 100_000 => Modulation::Wfm,
+        bw if bw >= 11_000  => Modulation::Nfm,
+        _                   => Modulation::Am,
+    }
+}
+
 #[derive(Clone)]
 pub struct SignalState {
     pub drops_per_sec:       u64,
@@ -36,6 +88,10 @@ pub struct SignalState {
     /// Unix-epoch second of the most recent ADC clip (saturation ≥ [`SAT_CLIP_PCT`]),
     /// for the rail's fading "last clip Xs" alert-memory. `None` = none this session.
     pub last_clip_at:         Option<u64>,
+    /// Rough modulation estimate for the signal at centre, refreshed each display
+    /// frame by the FFT worker via [`classify`]. Drives the lab_signal headline /
+    /// banner and, later, the demod panel's mode-adaptive view.
+    pub modulation:           Modulation,
     /// ADC loading for the Lab RF bench, refreshed each ~200 ms window: the loudest
     /// sample (`adc_peak_dbfs`), the full-bandwidth RMS level (`adc_rms_dbfs`, total
     /// I/Q power vs full scale — distinct from the in-channel `channel_power_dbfs`),
@@ -72,10 +128,35 @@ mod tests {
             snr_history: VecDeque::new(), pwr_history: VecDeque::new(), nf_history: VecDeque::new(),
             sat_history: VecDeque::new(),
             last_clip_at: None,
+            modulation: Modulation::Unknown,
             adc_peak_dbfs: 0.0, adc_rms_dbfs: 0.0, adc_clip_events: 0,
         };
         s.snr_history.extend(samples.iter().copied());
         s
+    }
+
+    #[test]
+    fn classify_gates_on_signal_presence() {
+        // Weak carrier or no occupancy → no guess.
+        assert_eq!(classify(5.0, 180_000), Modulation::Unknown);
+        assert_eq!(classify(40.0, 0),      Modulation::Unknown);
+    }
+
+    #[test]
+    fn classify_bands_by_occupied_bandwidth() {
+        assert_eq!(classify(40.0, 180_000), Modulation::Wfm);
+        assert_eq!(classify(40.0, 100_000), Modulation::Wfm); // wide boundary
+        assert_eq!(classify(40.0, 15_000),  Modulation::Nfm);
+        assert_eq!(classify(40.0, 11_000),  Modulation::Nfm); // narrow-FM boundary
+        assert_eq!(classify(40.0, 8_000),   Modulation::Am);
+    }
+
+    #[test]
+    fn modulation_labels_and_known_flag() {
+        assert_eq!(Modulation::Wfm.label(), "WFM");
+        assert_eq!(Modulation::Unknown.label(), "\u{2014}");
+        assert!(Modulation::Nfm.is_known());
+        assert!(!Modulation::Unknown.is_known());
     }
 
     #[test]
