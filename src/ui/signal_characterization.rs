@@ -11,7 +11,10 @@
 //!      peak hold.
 //!   3. ADJACENT CHANNEL — ACPR L/R, a badness-fill bar per side plus the
 //!      absolute level of the louder adjacent band.
-//!   4. SPECTRAL SHAPE   — C/N trend + crest (Step 7, skeleton for now).
+//!   4. SPECTRAL SHAPE   — C/N trend + crest.
+//!   5. Verdict           — a rule-based, plain-language read of the same four
+//!      zones (modulation / SNR / ACPR / OBW). No ML, no demod — pure function
+//!      of what's already measured, in the spirit of `timing_diagnostics::verdict_copy`.
 //!
 //! Every scalar comes from the latest coherent FFT frame (`state.waterfall.last_fft`),
 //! so the numbers agree with the bonded spectrum beside it.
@@ -24,7 +27,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::state::{FftFrame, SdrMetrics};
+use crate::state::{FftFrame, Modulation, SdrMetrics};
 use crate::ui::chrome::{field, section};
 use crate::ui::panel::Panel;
 
@@ -68,6 +71,73 @@ fn acpr_bar(db: f32, bar_w: usize, theme: &crate::Theme) -> Vec<Span<'static>> {
     crate::ui::charts::gain_bar_colored(badness, max_badness, bar_w, theme.status_ok, theme.status_crit, theme.border_dim)
 }
 
+/// SNR floor below which the panel won't even hazard a modulation guess (mirrors
+/// [`crate::state::CLASSIFY_MIN_SNR_DB`], the classifier's own gate) — below this
+/// there's nothing to characterize.
+const VERDICT_NO_SIGNAL_SNR_DB: f32 = crate::state::CLASSIFY_MIN_SNR_DB;
+/// SNR at/above which the carrier reads as genuinely clean — the same "clean"
+/// threshold [`snr_color`] already uses everywhere else in this panel.
+const VERDICT_CLEAN_SNR_DB: f32 = 20.0;
+/// ACPR worse (less negative) than this is flagged as adjacent-channel splatter
+/// worth a note. sdrtop's own instrument reading, not an asserted regulatory mask
+/// — same honesty stance as [`ACPR_BAR_FLOOR_DB`].
+const VERDICT_ACPR_CONCERN_DB: f32 = -20.0;
+
+/// The verdict card's severity, driving its colour and mark glyph. `NoSignal`
+/// reads dim/neutral, not critical — an empty channel isn't a fault.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum VerdictLevel { Clean, Caution, NoSignal }
+
+/// Plain-language, rule-based verdict — purely a function of what Tier A already
+/// measures (modulation, SNR, ACPR, occupied BW). No ML, no demod; mirrors
+/// `timing_diagnostics::verdict_copy`'s honest-narrative approach.
+fn verdict(modulation: Modulation, snr_db: f32, acpr_lower_db: f32, acpr_upper_db: f32, obw_hz: u64)
+    -> (VerdictLevel, String, String)
+{
+    if !modulation.is_known() || snr_db < VERDICT_NO_SIGNAL_SNR_DB {
+        return (
+            VerdictLevel::NoSignal,
+            "NO SIGNAL".to_string(),
+            "Nothing clearly above the noise floor at centre.".to_string(),
+        );
+    }
+
+    let obw_str = fmt_bw(obw_hz);
+    let mod_label = modulation.label();
+    // Worst (least negative — closest to the carrier) adjacent-channel ratio, if
+    // either side was measurable.
+    let worst_acpr = (acpr_lower_db.is_finite() || acpr_upper_db.is_finite())
+        .then(|| acpr_lower_db.max(acpr_upper_db));
+
+    if snr_db < VERDICT_CLEAN_SNR_DB {
+        return (
+            VerdictLevel::Caution,
+            format!("WEAK {mod_label} SIGNAL"),
+            format!("{mod_label} carrier detected, but only {snr_db:.0} dB above the noise floor \u{2014} marginal."),
+        );
+    }
+
+    if let Some(w) = worst_acpr {
+        if w > VERDICT_ACPR_CONCERN_DB {
+            return (
+                VerdictLevel::Caution,
+                format!("{mod_label} CARRIER \u{2014} ADJACENT SPLATTER"),
+                format!("Strong carrier ({snr_db:.0} dB), {obw_str} occupied, but only {w:.0} dB adjacent-channel suppression."),
+            );
+        }
+    }
+
+    let acpr_note = match worst_acpr {
+        Some(_) => format!(", ACPR {acpr_lower_db:.0}/{acpr_upper_db:.0} dB"),
+        None    => String::new(),
+    };
+    (
+        VerdictLevel::Clean,
+        format!("CLEAN {mod_label} SIGNAL"),
+        format!("Strong, well-separated {mod_label} carrier \u{2014} {snr_db:.0} dB above noise, {obw_str} occupied{acpr_note}."),
+    )
+}
+
 /// The strongest live bin as `(level_dbfs, freq_hz)`, mapping the bin index back to
 /// frequency across the captured span. `None` for an empty frame.
 fn peak_bin(fr: &FftFrame) -> Option<(f32, u64)> {
@@ -88,6 +158,10 @@ fn peak_bin(fr: &FftFrame) -> Option<(f32, u64)> {
 impl Panel for SignalCharacterizationPanel {
     fn name(&self) -> &'static str { "signal_characterization" }
     fn min_size(&self) -> (u16, u16) { (30, 12) }
+    fn focus_key(&self) -> Option<char> { Some('x') }
+    fn focus_bindings(&self) -> &'static [(&'static str, &'static str)] {
+        &[("C", "Snapshot to log")]
+    }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Theme, focused: bool) {
         // FFT-driven panel: stale the instant the latest frame ages past the shared
@@ -260,6 +334,32 @@ impl Panel for SignalCharacterizationPanel {
             lines.push(metric("Crest / PAPR", vec![dash()]));
         }
 
+        lines.push(Line::raw(""));
+
+        // ── Verdict ──────────────────────────────────────────────────────────
+        if let Some(fr) = frame.filter(|_| !stale) {
+            let (level, headline, detail) = verdict(
+                sig.modulation, fr.peak_to_nf_db, sig.acpr_lower_db, sig.acpr_upper_db, fr.occupied_bw_hz);
+            let (mark, col) = match level {
+                VerdictLevel::Clean    => ("\u{2713}", theme.status_ok),
+                VerdictLevel::Caution  => ("\u{26a0}", theme.status_warn),
+                VerdictLevel::NoSignal => ("\u{25cb}", theme.stale),
+            };
+            lines.push(Line::from(vec![
+                Span::raw(" "),
+                Span::styled(format!("{mark} {headline}"), Style::default().fg(col).add_modifier(Modifier::BOLD)),
+            ]));
+            lines.push(Line::from(vec![Span::raw(" "), Span::styled(detail, Style::default().fg(theme.label))]));
+            lines.push(Line::raw(""));
+            lines.push(Line::from(vec![
+                Span::raw(" "),
+                Span::styled("[C]", Style::default().fg(theme.value_hi).add_modifier(Modifier::BOLD)),
+                Span::styled(" snapshot to log", Style::default().fg(theme.label)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![Span::raw(" "), Span::styled("\u{25cb} IDLE \u{2014} RX stopped", dim)]));
+        }
+
         crate::ui::chrome::fit_spacers(&mut lines, inner.height as usize);
         f.render_widget(Paragraph::new(lines), inner);
     }
@@ -350,5 +450,49 @@ mod tests {
         assert_eq!(fmt_bw(180_000), "180.0 kHz");
         assert_eq!(fmt_bw(1_500_000), "1.500 MHz");
         assert_eq!(fmt_bw(400), "400 Hz");
+    }
+
+    #[test]
+    fn verdict_no_signal_below_classify_gate() {
+        // Unknown modulation (e.g. weak/no carrier) never gets a guessed verdict.
+        let (level, headline, _) = verdict(Modulation::Unknown, 40.0, -40.0, -40.0, 180_000);
+        assert_eq!(level, VerdictLevel::NoSignal);
+        assert_eq!(headline, "NO SIGNAL");
+        // A known modulation with SNR under the gate is still "no signal".
+        let (level, ..) = verdict(Modulation::Wfm, 5.0, -40.0, -40.0, 180_000);
+        assert_eq!(level, VerdictLevel::NoSignal);
+    }
+
+    #[test]
+    fn verdict_weak_signal_below_clean_threshold() {
+        let (level, headline, detail) = verdict(Modulation::Wfm, 15.0, -40.0, -40.0, 180_000);
+        assert_eq!(level, VerdictLevel::Caution);
+        assert!(headline.contains("WEAK"));
+        assert!(detail.contains("15 dB"));
+    }
+
+    #[test]
+    fn verdict_flags_adjacent_splatter_despite_clean_snr() {
+        let (level, headline, detail) = verdict(Modulation::Wfm, 40.0, -10.0, -40.0, 180_000);
+        assert_eq!(level, VerdictLevel::Caution);
+        assert!(headline.contains("SPLATTER"));
+        assert!(detail.contains("-10 dB"));
+    }
+
+    #[test]
+    fn verdict_clean_when_strong_and_well_suppressed() {
+        let (level, headline, detail) = verdict(Modulation::Wfm, 43.7, -38.0, -41.0, 180_000);
+        assert_eq!(level, VerdictLevel::Clean);
+        assert!(headline.contains("CLEAN"));
+        assert!(detail.contains("180.0 kHz"));
+        assert!(detail.contains("ACPR -38/-41 dB"));
+    }
+
+    #[test]
+    fn verdict_clean_without_acpr_data_omits_the_clause() {
+        // No adjacent-channel measurement yet (e.g. band edge) → no fabricated ACPR note.
+        let (level, _, detail) = verdict(Modulation::Nfm, 30.0, f32::NEG_INFINITY, f32::NEG_INFINITY, 15_000);
+        assert_eq!(level, VerdictLevel::Clean);
+        assert!(!detail.contains("ACPR"));
     }
 }

@@ -97,6 +97,7 @@ fn handle_normal(
         Some("timing_panel")    => handle_timing_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         Some("sweep_panel")      => handle_sweep_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         Some("signal_metrics")   => handle_signal_metrics_focus(key, state, device, engine, show_help, show_footer, focus_keys),
+        Some("signal_characterization") => handle_signal_characterization_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         Some("command_rail")     => handle_command_rail_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         Some("lab_banner")      => handle_lab_banner_focus(key, state, device, engine, show_help, show_footer, focus_keys),
         _                       => handle_global(key, state, device, engine, show_help, show_footer, focus_keys),
@@ -621,6 +622,39 @@ fn handle_signal_metrics_focus(
         m.push_log(format!(
             "Signal snapshot — SNR: {:.1} dB · Pwr: {:.1} dBFS · OBW: {} · NF: {}",
             snr, pwr, obw_str, nf_str
+        ));
+        return KeyAction::Continue;
+    }
+    handle_global(key, state, device, engine, show_help, show_footer, focus_keys)
+}
+
+/// `signal_characterization` focus (`[X]`): `[C]` logs a one-line snapshot of the
+/// current characterization — modulation, SNR, occupied BW, and ACPR when it's
+/// been measured. The `lab_signal` analogue of `handle_signal_metrics_focus`.
+fn handle_signal_characterization_focus(
+    key: KeyEvent,
+    state: &Arc<Mutex<SdrMetrics>>,
+    device: Option<&Arc<dyn hardware::SdrDevice>>,
+    engine: &mut ui::LayoutEngine,
+    show_help: &mut bool,
+    show_footer: &mut bool,
+    focus_keys: &HashMap<char, &'static str>,
+) -> KeyAction {
+    if let KeyCode::Char('c') = key.code {
+        let mut m = state.lock().unwrap_or_else(|e| e.into_inner());
+        let modulation = m.signal.modulation.label();
+        let snr = m.signal.peak_to_nf_db;
+        let obw = m.signal.occupied_bw_hz;
+        let obw_str = fmt_bw(obw);
+        let acpr_lo = m.signal.acpr_lower_db;
+        let acpr_hi = m.signal.acpr_upper_db;
+        let acpr_str = if acpr_lo.is_finite() {
+            format!(" · ACPR {acpr_lo:.0}/{acpr_hi:.0} dB")
+        } else {
+            String::new()
+        };
+        m.push_log(format!(
+            "Signal characterization \u{2014} {modulation}: SNR {snr:.1} dB \u{00b7} OBW {obw_str}{acpr_str}"
         ));
         return KeyAction::Continue;
     }
