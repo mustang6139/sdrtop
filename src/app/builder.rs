@@ -52,6 +52,8 @@ impl App {
         registry.register(ui::LevelDiagramPanel);
         registry.register(ui::AdcLoadingPanel);
         registry.register(ui::SignalMetricsPanel);
+        registry.register(ui::SignalCharacterizationPanel);
+        registry.register(ui::FmDemodPanel);
         registry.register(ui::IqHistogramPanel);
         registry.register(ui::ObserverPanel);
         registry.register(ui::MicroPanel);
