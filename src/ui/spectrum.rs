@@ -126,6 +126,23 @@ pub fn freq_scale_spans(left_hz: f64, bw: f64, width: usize,
     spans
 }
 
+/// The occupied-bandwidth window as a symmetric span around `center_hz` — the
+/// app's own display convention ("the channel is centred at the tuned LO",
+/// matching the ACPR offset math and the lab_iq carrier model), not necessarily
+/// the SM.328 cumulative method's true (possibly asymmetric) cutoff bins, which
+/// aren't retained past the FFT worker. A clearly-labelled approximation, good
+/// for the primary lab_signal use case of a single centred carrier.
+fn obw_bounds(center_hz: u64, obw_hz: u64) -> (f64, f64) {
+    let half = obw_hz as f64 / 2.0;
+    (center_hz as f64 - half, center_hz as f64 + half)
+}
+
+/// Signed delta between two markers: `(Δf_hz, Δlevel_db)`, second minus first —
+/// matches the mockup's "Δ +180.0 kHz  -38.1 dB" reading (MKR2 relative to MKR1).
+fn marker_delta(freq_a: u64, level_a: f32, freq_b: u64, level_b: f32) -> (i64, f32) {
+    (freq_b as i64 - freq_a as i64, level_b - level_a)
+}
+
 /// Border set for the spectrum given its bond. `Bond::Below` drops the bottom
 /// border (the waterfall's top border below becomes the shared ruler); otherwise
 /// the panel is fully framed.
@@ -346,6 +363,21 @@ pub fn render(f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Them
                 // trace, at the same dB ticks and frequency quarters as the axes.
                 let grid_color = theme.stale;
 
+                // Signal-characterization overlays (OBW band, Δ readout, noise-floor
+                // / legend labels) are specific to the lab_signal instrument — the
+                // only lab preset that bonds spectrum+waterfall in its Body column.
+                // Every other preset that bonds them (main, command_rail) is untouched.
+                let signal_overlay = state.ui.active_preset == "lab_signal";
+                let obw_color = dim(theme.border_accent, 0.55);
+                // OBW band bounds (canvas x): a symmetric window around the tuned
+                // centre. `None` on an edge means it's out of the current zoomed view.
+                let (obw_lo_x, obw_hi_x) = if signal_overlay && frame.occupied_bw_hz > 0 {
+                    let (lo_hz, hi_hz) = obw_bounds(frame.center_freq_hz, frame.occupied_bw_hz);
+                    (freq_to_canvas_x(lo_hz, left_hz, bw, n), freq_to_canvas_x(hi_hz, left_hz, bw, n))
+                } else {
+                    (None, None)
+                };
+
                 // Cursor canvas x-coordinate (0..n-1).
                 let cursor_x_canvas = state.spectrum.cursor_freq.and_then(|cf| {
                     freq_to_canvas_x(cf as f64, left_hz, bw, n)
@@ -490,6 +522,13 @@ pub fn render(f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Them
                                     ctx.draw(&CanvasLine { x1: hi, y1: y_min, x2: hi, y2: y_max, color: bw_border_color });
                                 }
                             }
+                            // 6b. OBW band boundaries (lab_signal only).
+                            if let Some(x) = obw_lo_x {
+                                ctx.draw(&CanvasLine { x1: x, y1: y_min, x2: x, y2: y_max, color: obw_color });
+                            }
+                            if let Some(x) = obw_hi_x {
+                                ctx.draw(&CanvasLine { x1: x, y1: y_min, x2: x, y2: y_max, color: obw_color });
+                            }
                             // 7. Tuning cursor — full-height line, always visible.
                             if let Some(cx) = cursor_x_canvas {
                                 ctx.draw(&CanvasLine { x1: cx, y1: y_min, x2: cx, y2: y_max, color: cursor_color });
@@ -630,6 +669,90 @@ pub fn render(f: &mut Frame, area: Rect, state: &SdrMetrics, theme: &crate::Them
                     }
                 }
 
+                // ── Signal-characterization overlays (lab_signal only) ────
+                if signal_overlay && canvas_area.height >= 3 && canvas_area.width > 24 {
+                    let ch = canvas_area.height;
+                    let mut obw_label_cols: Option<(u16, u16)> = None;
+
+                    // OBW label — centred under its two boundary lines, bottom row.
+                    if let (Some(lo_x), Some(hi_x)) = (obw_lo_x, obw_hi_x) {
+                        let label = format!("OBW {}", fmt_khz(frame.occupied_bw_hz));
+                        let lw = label.chars().count() as u16;
+                        let mid_col = (((lo_x + hi_x) / 2.0) as u16).min(canvas_area.width.saturating_sub(1));
+                        let col = mid_col.saturating_sub(lw / 2).min(canvas_area.width.saturating_sub(lw));
+                        obw_label_cols = Some((col, col + lw));
+                        f.render_widget(
+                            Paragraph::new(Span::styled(label, Style::default().fg(obw_color))),
+                            Rect {
+                                x: canvas_area.x + col, y: canvas_area.y + ch - 1,
+                                width: lw.min(canvas_area.width.saturating_sub(col)), height: 1,
+                            },
+                        );
+                    }
+
+                    // Noise-floor label — one row above the bottom, near the left
+                    // edge, at the row the noise-floor line actually sits.
+                    let nf_frac = ((y_max_f - noise_floor.clamp(y_min_f, y_max_f)) / span).clamp(0.0, 1.0);
+                    let nf_row  = ((nf_frac * (ch - 1) as f32) as u16).min(ch.saturating_sub(2));
+                    let nf_label = format!("noise floor {:.0} dBFS", noise_floor);
+                    let nf_lw = nf_label.chars().count() as u16;
+                    if nf_lw < canvas_area.width {
+                        f.render_widget(
+                            Paragraph::new(Span::styled(nf_label, Style::default().fg(dim(noise_floor_color, 0.8)))),
+                            Rect { x: canvas_area.x + 1, y: canvas_area.y + nf_row, width: nf_lw, height: 1 },
+                        );
+                    }
+
+                    // Δ readout box — top-right, MKR2 relative to MKR1, when both
+                    // markers exist and both fall within the currently zoomed view.
+                    if let (Some(m1), Some(m2)) = (state.spectrum.markers.first(), state.spectrum.markers.get(1)) {
+                        let level_at = |freq_hz: u64| -> Option<f32> {
+                            let frac = (freq_hz as f64 - left_hz) / bw;
+                            if (0.0..=1.0).contains(&frac) {
+                                let idx = (frac * (n_bins - 1) as f64).round() as usize;
+                                flag_bins.get(idx.min(n_bins.saturating_sub(1))).copied()
+                            } else { None }
+                        };
+                        if let (Some(l1), Some(l2)) = (level_at(m1.freq_hz), level_at(m2.freq_hz)) {
+                            let (df_hz, da_db) = marker_delta(m1.freq_hz, l1, m2.freq_hz, l2);
+                            let line1 = format!("\u{0394} {:+.1} kHz", df_hz as f64 / 1_000.0);
+                            let line2 = format!("  {:+.1} dB", da_db);
+                            let bwid = line1.chars().count().max(line2.chars().count()) as u16;
+                            if bwid < canvas_area.width {
+                                let col = canvas_area.width - bwid;
+                                f.render_widget(
+                                    Paragraph::new(Span::styled(line1, Style::default().fg(theme.value_hi))),
+                                    Rect { x: canvas_area.x + col, y: canvas_area.y, width: bwid, height: 1 },
+                                );
+                                f.render_widget(
+                                    Paragraph::new(Span::styled(line2, Style::default().fg(theme.value))),
+                                    Rect { x: canvas_area.x + col, y: canvas_area.y + 1, width: bwid, height: 1 },
+                                );
+                            }
+                        }
+                    }
+
+                    // Trace legend — bottom-right, best-effort: skipped entirely if
+                    // it would collide with the OBW label sharing the same row.
+                    let legend = vec![
+                        Span::styled("\u{2501}", Style::default().fg(theme.border_accent)),
+                        Span::styled(" live  ", Style::default().fg(theme.label)),
+                        Span::styled("\u{2501}", Style::default().fg(peak_hold_color)),
+                        Span::styled(" peak-hold", Style::default().fg(theme.label)),
+                    ];
+                    let legend_w: u16 = legend.iter().map(|s| s.content.chars().count() as u16).sum();
+                    if legend_w < canvas_area.width {
+                        let col = canvas_area.width - legend_w;
+                        let clear = obw_label_cols.map(|(s, e)| col >= e || col + legend_w <= s).unwrap_or(true);
+                        if clear {
+                            f.render_widget(
+                                Paragraph::new(Line::from(legend)),
+                                Rect { x: canvas_area.x + col, y: canvas_area.y + ch - 1, width: legend_w, height: 1 },
+                            );
+                        }
+                    }
+                }
+
                 // ── Frequency axis (own row; omitted when bonded below) ───
                 if let Some(freq_area) = freq_area {
                     let freq_spans = freq_scale_spans(left_hz, bw, canvas_area.width as usize,
@@ -766,6 +889,28 @@ mod tests {
         // Standalone / above: fully framed.
         assert_eq!(bond_borders(Bond::None), Borders::ALL);
         assert_eq!(bond_borders(Bond::Above), Borders::ALL);
+    }
+
+    #[test]
+    fn obw_bounds_is_symmetric_around_centre() {
+        assert_eq!(obw_bounds(100_000_000, 180_000), (99_910_000.0, 100_090_000.0));
+        assert_eq!(obw_bounds(92_800_000, 0), (92_800_000.0, 92_800_000.0), "zero OBW collapses to a point at centre");
+    }
+
+    #[test]
+    fn marker_delta_is_second_minus_first() {
+        // 92.800 MHz / -19.1 dBFS vs 92.980 MHz / -57.2 dBFS → the mockup's
+        // "Δ +180.0 kHz  -38.1 dB" reading.
+        let (df_hz, da_db) = marker_delta(92_800_000, -19.1, 92_980_000, -57.2);
+        assert_eq!(df_hz, 180_000);
+        assert!((da_db - (-38.1)).abs() < 1e-4, "got {da_db}");
+    }
+
+    #[test]
+    fn marker_delta_sign_flips_with_argument_order() {
+        let (df_hz, da_db) = marker_delta(92_980_000, -57.2, 92_800_000, -19.1);
+        assert_eq!(df_hz, -180_000);
+        assert!((da_db - 38.1).abs() < 1e-4, "got {da_db}");
     }
 
     #[test]
