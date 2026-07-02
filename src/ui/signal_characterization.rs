@@ -9,7 +9,8 @@
 //!   1. RADIO HEADLINE   — the peak/noise figure + a status lamp.
 //!   2. SIGNAL METRICS   — channel power, peak (+freq), noise floor, occupied BW,
 //!      peak hold.
-//!   3. ADJACENT CHANNEL — ACPR L/R (Step 6, skeleton for now).
+//!   3. ADJACENT CHANNEL — ACPR L/R, a badness-fill bar per side plus the
+//!      absolute level of the louder adjacent band.
 //!   4. SPECTRAL SHAPE   — C/N trend + crest (Step 7, skeleton for now).
 //!
 //! Every scalar comes from the latest coherent FFT frame (`state.waterfall.last_fft`),
@@ -49,6 +50,22 @@ fn fmt_bw(hz: u64) -> String {
     if hz >= 1_000_000      { format!("{:.3} MHz", hz as f64 / 1e6) }
     else if hz >= 1_000     { format!("{:.1} kHz", hz as f64 / 1e3) }
     else                    { format!("{hz} Hz") }
+}
+
+/// The ACPR bar's own display floor — not a regulatory spectral-mask limit (we
+/// don't assert one), just how far down this gauge reads before showing a fully
+/// clean, empty bar. A ratio at 0 dB (touching the carrier) reads full/red.
+const ACPR_BAR_FLOOR_DB: f32 = -80.0;
+
+/// Map an ACPR ratio to a ⅛-block badness bar: more fill = closer to the
+/// carrier = worse (green→red, same grading the timing deadline bars use). No
+/// reference tick — unlike the timing budget bar, there is no verified
+/// regulatory ACPR threshold to mark, so the bar shows the measurement only.
+fn acpr_bar(db: f32, bar_w: usize, theme: &crate::Theme) -> Vec<Span<'static>> {
+    let clamped = db.clamp(ACPR_BAR_FLOOR_DB, 0.0);
+    let badness = ((clamped - ACPR_BAR_FLOOR_DB) * 10.0).round() as u32;
+    let max_badness = ((0.0 - ACPR_BAR_FLOOR_DB) * 10.0).round() as u32;
+    crate::ui::charts::gain_bar_colored(badness, max_badness, bar_w, theme.status_ok, theme.status_crit, theme.border_dim)
 }
 
 /// The strongest live bin as `(level_dbfs, freq_hz)`, mapping the bin index back to
@@ -170,9 +187,39 @@ impl Panel for SignalCharacterizationPanel {
 
         lines.push(Line::raw(""));
 
-        // ── ADJACENT CHANNEL / SPECTRAL SHAPE (skeleton — Steps 6 & 7) ───────
+        // ── ADJACENT CHANNEL (ACPR) ───────────────────────────────────────────
         lines.push(section("ADJACENT CHANNEL", "ACPR", iw, theme));
+        let sig = &state.signal;
+        if !stale && sig.acpr_lower_db.is_finite() {
+            const LABEL_W: usize = 8;
+            for (label, db) in [("L -200k", sig.acpr_lower_db), ("R +200k", sig.acpr_upper_db)] {
+                let value_str = format!("{db:.1} dB");
+                // lead(1) + label(8) + gap(1) + bar + gap(1) + value
+                let bar_w = iw.saturating_sub(1 + LABEL_W + 1 + 1 + value_str.chars().count()).max(6);
+                let mut spans = vec![Span::styled(format!(" {label:<LABEL_W$}"), Style::default().fg(theme.label))];
+                spans.extend(acpr_bar(db, bar_w, theme));
+                spans.push(Span::styled(format!(" {value_str}"), val));
+                lines.push(Line::from(spans));
+            }
+            let adj_freq = if let Some(fr) = frame {
+                if sig.acpr_upper_db >= sig.acpr_lower_db {
+                    fr.center_freq_hz + crate::state::ACPR_OFFSET_HZ as u64
+                } else {
+                    fr.center_freq_hz.saturating_sub(crate::state::ACPR_OFFSET_HZ as u64)
+                }
+            } else { 0 };
+            lines.push(metric("Adj carrier", vec![
+                Span::styled(format!("{:.1} dBFS", sig.adj_carrier_dbfs), val),
+                Span::styled(format!("   {}", fmt_freq(adj_freq)), dim),
+            ]));
+        } else {
+            lines.push(metric("L -200k", vec![dash()]));
+            lines.push(metric("R +200k", vec![dash()]));
+        }
+
         lines.push(Line::raw(""));
+
+        // ── SPECTRAL SHAPE (skeleton — Step 7) ────────────────────────────────
         lines.push(section("SPECTRAL SHAPE", "60 s", iw, theme));
         lines.push(Line::raw(""));
 
@@ -236,6 +283,29 @@ mod tests {
         assert_eq!(snr_color(25.0, &t), t.status_ok);
         assert_eq!(snr_color(15.0, &t), t.status_warn);
         assert_eq!(snr_color(5.0, &t), t.status_crit);
+    }
+
+    #[test]
+    fn acpr_bar_width_matches_bar_w() {
+        let t = crate::theme::Theme::sdr();
+        let spans = acpr_bar(-38.0, 24, &t);
+        let w: usize = spans.iter().map(|s| s.content.chars().count()).sum();
+        assert_eq!(w, 24);
+    }
+
+    #[test]
+    fn acpr_bar_touching_carrier_is_full_red() {
+        let t = crate::theme::Theme::sdr();
+        let spans = acpr_bar(0.0, 10, &t);
+        assert_eq!(spans.last().unwrap().style.fg, Some(t.status_crit));
+    }
+
+    #[test]
+    fn acpr_bar_below_floor_is_empty() {
+        let t = crate::theme::Theme::sdr();
+        let spans = acpr_bar(-95.0, 10, &t);
+        let s: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(s.chars().all(|c| c == ' '), "below the display floor reads as clean/empty: {s:?}");
     }
 
     #[test]

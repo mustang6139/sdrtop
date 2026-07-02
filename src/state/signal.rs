@@ -5,6 +5,14 @@ use std::collections::VecDeque;
 /// worth remembering, not measurement noise.
 pub const SAT_CLIP_PCT: f32 = 10.0;
 
+/// Adjacent-channel offset from centre for the ACPR measurement, fixed at the
+/// mockup's FM-broadcast spacing. This is sdrtop's own display convention, not
+/// a regulatory channel-plan value — it applies to whatever the measured
+/// occupied bandwidth turns out to be. Shared by the FFT worker (which computes
+/// the ratio) and the characterization panel (which labels the adjacent-band
+/// frequency from it), so the two never drift apart.
+pub const ACPR_OFFSET_HZ: f64 = 200_000.0;
+
 /// A rough modulation estimate for the signal at centre. Honest by design: a
 /// bandwidth heuristic (see [`classify`]), not a demodulating classifier. The
 /// demod phase refines it (e.g. WFM confirmed by a 19 kHz pilot lock).
@@ -68,6 +76,15 @@ pub struct SignalState {
     pub peak_to_nf_db:       f32,
     pub channel_power_dbfs:  f32,
     pub occupied_bw_hz:      u64,
+    /// Adjacent-channel power ratio, dB relative to the in-channel power, at
+    /// ±[`ACPR_OFFSET_HZ`]. `f32::NEG_INFINITY` when there is nothing to compare
+    /// against yet (no occupied bandwidth) or a band falls outside the captured
+    /// span — never a guessed number.
+    pub acpr_lower_db:       f32,
+    pub acpr_upper_db:       f32,
+    /// Absolute level (dBFS) of the louder — worse — of the two adjacent bands.
+    /// Paired with `acpr_lower_db` / `acpr_upper_db`; same undefined sentinel.
+    pub adj_carrier_dbfs:    f32,
     pub usb_errors_session:   u64,
     pub usb_errors_last_poll: u64,
     pub usb_error_history:    std::collections::VecDeque<u64>,
@@ -124,6 +141,8 @@ mod tests {
             drops_per_sec: 0, total_drops_session: 0, drop_history: VecDeque::new(),
             adc_saturation_pct: 0.0, adc_saturation_peak: 0.0, saturation_history: VecDeque::new(),
             peak_to_nf_db: 0.0, channel_power_dbfs: 0.0, occupied_bw_hz: 0,
+            acpr_lower_db: f32::NEG_INFINITY, acpr_upper_db: f32::NEG_INFINITY,
+            adj_carrier_dbfs: f32::NEG_INFINITY,
             usb_errors_session: 0, usb_errors_last_poll: 0, usb_error_history: VecDeque::new(),
             snr_history: VecDeque::new(), pwr_history: VecDeque::new(), nf_history: VecDeque::new(),
             sat_history: VecDeque::new(),
