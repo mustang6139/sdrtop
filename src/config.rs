@@ -316,18 +316,22 @@ impl LayoutConfig {
                 PanelSpec { name: "footer".into(),          position: Bottom, height: None,    width_pct: None     },
             ],
         };
-        // Lab signal — signal-quality focus: spectrum + metrics on top, waterfall
-        // history below.
+        // Lab signal — signal-characterization instrument (DSN-2026-07 redesign):
+        // a left characterization rail (headline / metrics / ACPR / spectral
+        // shape), the bonded spectrum + waterfall filling the body, and the FM
+        // MPX · demod column on the right. The [spectrum, waterfall] Body pair
+        // triggers the engine's bond automatically (shared frequency ruler).
         let lab_signal = PresetConfig {
             panels: vec![
-                PanelSpec { name: "header".into(),         position: Top,    height: Some(5), width_pct: None     },
-                PanelSpec { name: "lab_banner".into(),     position: Top,    height: Some(2), width_pct: None     },
-                PanelSpec { name: "spectrum".into(),       position: Body,   height: None,    width_pct: None     },
-                PanelSpec { name: "signal_metrics".into(), position: Right,  height: None,    width_pct: Some(28) },
-                PanelSpec { name: "waterfall".into(),      position: Bottom, height: Some(8), width_pct: None     },
-                PanelSpec { name: "lab_marker".into(),     position: Bottom, height: Some(2), width_pct: None     },
-                PanelSpec { name: "log".into(),            position: Bottom, height: Some(5), width_pct: None     },
-                PanelSpec { name: "footer".into(),         position: Bottom, height: None,    width_pct: None     },
+                PanelSpec { name: "header".into(),                  position: Top,    height: Some(5), width_pct: None     },
+                PanelSpec { name: "lab_banner".into(),              position: Top,    height: Some(2), width_pct: None     },
+                PanelSpec { name: "signal_characterization".into(), position: Left,   height: None,    width_pct: Some(26) },
+                PanelSpec { name: "spectrum".into(),                position: Body,   height: None,    width_pct: None     },
+                PanelSpec { name: "waterfall".into(),               position: Body,   height: None,    width_pct: None     },
+                PanelSpec { name: "fm_demod".into(),                position: Right,  height: None,    width_pct: Some(26) },
+                PanelSpec { name: "lab_marker".into(),              position: Bottom, height: Some(2), width_pct: None     },
+                PanelSpec { name: "log".into(),                     position: Bottom, height: Some(5), width_pct: None     },
+                PanelSpec { name: "footer".into(),                  position: Bottom, height: None,    width_pct: None     },
             ],
         };
         // Lab timing — host-side stream-timing instrument (DSN-2026-06 redesign):
@@ -561,6 +565,27 @@ mod tests {
         let names: Vec<&str> = p.panels.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"sweep_panel"), "lab_sweep missing sweep_panel");
         assert!(names.contains(&"sweep_strip"), "lab_sweep missing sweep_strip");
+    }
+
+    #[test]
+    fn default_config_lab_signal_has_redesign_panels() {
+        // The lab_signal redesign is a three-zone instrument: the characterization
+        // rail, the bonded spectrum + waterfall center, and the FM demod column.
+        let cfg = LayoutConfig::default_config();
+        let p = cfg.presets.get("lab_signal").expect("lab_signal preset present");
+        let names: Vec<&str> = p.panels.iter().map(|s| s.name.as_str()).collect();
+        for panel in ["signal_characterization", "spectrum", "waterfall", "fm_demod"] {
+            assert!(names.contains(&panel), "lab_signal missing {panel}");
+        }
+        // spectrum + waterfall both live in the Body column so the engine bonds
+        // them into one shared-ruler instrument.
+        let body: Vec<&str> = p.panels.iter()
+            .filter(|s| matches!(s.position, Position::Body))
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(body, vec!["spectrum", "waterfall"], "bond pair must be the Body column");
+        // The bottom lab chrome (marker bar) rides along like the other labs.
+        assert!(names.contains(&"lab_marker"), "lab_signal missing lab_marker");
     }
 
     #[test]
