@@ -49,7 +49,7 @@ fn fmt_freq(hz: u64) -> String {
 }
 
 /// Occupied-bandwidth readout: MHz / kHz / Hz by magnitude.
-fn fmt_bw(hz: u64) -> String {
+pub(crate) fn fmt_bw(hz: u64) -> String {
     if hz >= 1_000_000      { format!("{:.3} MHz", hz as f64 / 1e6) }
     else if hz >= 1_000     { format!("{:.1} kHz", hz as f64 / 1e3) }
     else                    { format!("{hz} Hz") }
@@ -84,14 +84,30 @@ const VERDICT_CLEAN_SNR_DB: f32 = 20.0;
 const VERDICT_ACPR_CONCERN_DB: f32 = -20.0;
 
 /// The verdict card's severity, driving its colour and mark glyph. `NoSignal`
-/// reads dim/neutral, not critical — an empty channel isn't a fault.
+/// reads dim/neutral, not critical — an empty channel isn't a fault. `pub(crate)`
+/// so the lab_signal marker bar's QUALITY field (`lab_chrome::signal_marker_lines`)
+/// can read the exact same severity the card shows — one source of truth, same
+/// precedent as `image_scope::CarrierImage`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum VerdictLevel { Clean, Caution, NoSignal }
+pub(crate) enum VerdictLevel { Clean, Caution, NoSignal }
+
+impl VerdictLevel {
+    /// Short word for a tight space (the marker bar), distinct from the verdict
+    /// card's fuller headline (e.g. "WEAK WFM SIGNAL" / "CLEAN WFM SIGNAL").
+    pub(crate) fn short_label(self) -> &'static str {
+        match self {
+            VerdictLevel::Clean    => "Clean",
+            VerdictLevel::Caution  => "Caution",
+            VerdictLevel::NoSignal => "No signal",
+        }
+    }
+}
 
 /// Plain-language, rule-based verdict — purely a function of what Tier A already
 /// measures (modulation, SNR, ACPR, occupied BW). No ML, no demod; mirrors
-/// `timing_diagnostics::verdict_copy`'s honest-narrative approach.
-fn verdict(modulation: Modulation, snr_db: f32, acpr_lower_db: f32, acpr_upper_db: f32, obw_hz: u64)
+/// `timing_diagnostics::verdict_copy`'s honest-narrative approach. `pub(crate)`
+/// for the same reason as [`VerdictLevel`].
+pub(crate) fn verdict(modulation: Modulation, snr_db: f32, acpr_lower_db: f32, acpr_upper_db: f32, obw_hz: u64)
     -> (VerdictLevel, String, String)
 {
     if !modulation.is_known() || snr_db < VERDICT_NO_SIGNAL_SNR_DB {
@@ -450,6 +466,13 @@ mod tests {
         assert_eq!(fmt_bw(180_000), "180.0 kHz");
         assert_eq!(fmt_bw(1_500_000), "1.500 MHz");
         assert_eq!(fmt_bw(400), "400 Hz");
+    }
+
+    #[test]
+    fn verdict_level_short_labels() {
+        assert_eq!(VerdictLevel::Clean.short_label(), "Clean");
+        assert_eq!(VerdictLevel::Caution.short_label(), "Caution");
+        assert_eq!(VerdictLevel::NoSignal.short_label(), "No signal");
     }
 
     #[test]

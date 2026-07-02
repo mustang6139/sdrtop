@@ -140,6 +140,27 @@ fn timing_banner_fields(t: &crate::state::TimingState) -> Vec<(&'static str, Str
     ]
 }
 
+/// Lab signal banner middle fields: `MOD … · SNR … · CH PWR … · OBW …`. MOD
+/// reads `—` while the classifier hasn't committed to a modulation (weak/no
+/// carrier at centre) — never a fabricated label.
+fn signal_banner_fields(state: &SdrMetrics) -> Vec<(&'static str, String)> {
+    let sig = &state.signal;
+    vec![
+        ("MOD",    sig.modulation.label().to_string()),
+        ("SNR",    format!("{:.0} dB", sig.peak_to_nf_db)),
+        ("CH PWR", if sig.channel_power_dbfs.is_finite() {
+            format!("{:.1} dBFS", sig.channel_power_dbfs)
+        } else {
+            "\u{2014}".to_string()
+        }),
+        ("OBW", if sig.occupied_bw_hz > 0 {
+            crate::ui::signal_characterization::fmt_bw(sig.occupied_bw_hz)
+        } else {
+            "\u{2014}".to_string()
+        }),
+    ]
+}
+
 fn banner_lines(state: &SdrMetrics, theme: &crate::Theme, iw: usize, focused: bool) -> Vec<Line<'static>> {
     let (label, num) = match lab_label(&state.ui.active_preset) {
         Some(x) => x,
@@ -185,6 +206,8 @@ fn banner_lines(state: &SdrMetrics, theme: &crate::Theme, iw: usize, focused: bo
         rf_banner_fields(state)
     } else if state.ui.active_preset == "lab_timing" {
         timing_banner_fields(&state.timing)
+    } else if state.ui.active_preset == "lab_signal" {
+        signal_banner_fields(state)
     } else {
         // In Lab IQ the two markers are the auto-tracked carrier + image, so MKR
         // reads "2" (and "pin" when frozen) rather than the placed-marker count.
@@ -465,6 +488,74 @@ fn timing_marker_lines(state: &SdrMetrics, theme: &crate::Theme, iw: usize) -> V
     vec![hairline(iw, theme.border_dim), Line::from(spans)]
 }
 
+/// Lab signal marker bar: `MKR1 … · MKR2 … · Δ … · OBW … · QUALITY …` — the
+/// user-placed markers (same read as the generic bar), plus the occupied
+/// bandwidth and verdict severity the left rail's card already shows. QUALITY
+/// calls `signal_characterization::verdict` directly — one source of truth, so
+/// the bottom bar and the card can never disagree (same precedent as Lab IQ's
+/// marker bar reading `image_scope::carrier_image`).
+fn signal_marker_lines(state: &SdrMetrics, theme: &crate::Theme, iw: usize) -> Vec<Line<'static>> {
+    let dim = Style::default().fg(theme.label);
+    let val = Style::default().fg(theme.value);
+    let sig = &state.signal;
+
+    let m1 = state.spectrum.markers.first();
+    let m2 = state.spectrum.markers.get(1);
+
+    let mut spans: Vec<Span> = vec![Span::raw(" ")];
+    spans.extend(marker_spans(1, m1, state, theme));
+    let mut used = span_w(&spans);
+
+    let try_add = |cand: Vec<Span<'static>>, used: &mut usize, spans: &mut Vec<Span<'static>>| {
+        let cw = span_w(&cand);
+        if *used + cw + 1 <= iw { spans.extend(cand); *used += cw; }
+    };
+
+    if m2.is_some() {
+        let mut c = vec![Span::raw("   ")];
+        c.extend(marker_spans(2, m2, state, theme));
+        try_add(c, &mut used, &mut spans);
+    }
+
+    if let (Some(a), Some(b)) = (m1, m2) {
+        let df = (b.freq_hz as i64 - a.freq_hz as i64).unsigned_abs();
+        let dl = match (level_at_freq(state, a.freq_hz), level_at_freq(state, b.freq_hz)) {
+            (Some(x), Some(y)) => Some(y - x),
+            _ => None,
+        };
+        try_add(vec![
+            Span::raw("   "),
+            Span::styled("\u{0394} ", dim),
+            Span::styled(fmt_delta(df, dl), Style::default().fg(theme.value).add_modifier(Modifier::BOLD)),
+        ], &mut used, &mut spans);
+    }
+
+    let obw_str = if sig.occupied_bw_hz > 0 {
+        crate::ui::signal_characterization::fmt_bw(sig.occupied_bw_hz)
+    } else {
+        "\u{2014}".to_string()
+    };
+    try_add(vec![
+        Span::raw("   "), Span::styled("OBW ", dim),
+        Span::styled(obw_str, val),
+    ], &mut used, &mut spans);
+
+    let (level, ..) = crate::ui::signal_characterization::verdict(
+        sig.modulation, sig.peak_to_nf_db, sig.acpr_lower_db, sig.acpr_upper_db, sig.occupied_bw_hz);
+    let (mark, col) = match level {
+        crate::ui::signal_characterization::VerdictLevel::Clean    => ("\u{2713}", theme.status_ok),
+        crate::ui::signal_characterization::VerdictLevel::Caution  => ("\u{26a0}", theme.status_warn),
+        crate::ui::signal_characterization::VerdictLevel::NoSignal => ("\u{25cb}", theme.stale),
+    };
+    try_add(vec![
+        Span::raw("   "), Span::styled("QUALITY ", dim),
+        Span::styled(format!("{mark} {}", level.short_label()), Style::default().fg(col).add_modifier(Modifier::BOLD)),
+    ], &mut used, &mut spans);
+
+    append_focus_hints(state, theme, iw, used, &mut spans);
+    vec![hairline(iw, theme.border_dim), Line::from(spans)]
+}
+
 fn marker_lines(state: &SdrMetrics, theme: &crate::Theme, iw: usize) -> Vec<Line<'static>> {
     if state.ui.active_preset == "lab_iq" {
         return iq_marker_lines(state, theme, iw);
@@ -474,6 +565,9 @@ fn marker_lines(state: &SdrMetrics, theme: &crate::Theme, iw: usize) -> Vec<Line
     }
     if state.ui.active_preset == "lab_timing" {
         return timing_marker_lines(state, theme, iw);
+    }
+    if state.ui.active_preset == "lab_signal" {
+        return signal_marker_lines(state, theme, iw);
     }
     let dim = Style::default().fg(theme.label);
     let key = Style::default().fg(theme.value_hi);
