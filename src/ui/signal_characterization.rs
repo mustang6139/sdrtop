@@ -219,9 +219,46 @@ impl Panel for SignalCharacterizationPanel {
 
         lines.push(Line::raw(""));
 
-        // ── SPECTRAL SHAPE (skeleton — Step 7) ────────────────────────────────
+        // ── SPECTRAL SHAPE ─────────────────────────────────────────────────
         lines.push(section("SPECTRAL SHAPE", "60 s", iw, theme));
-        lines.push(Line::raw(""));
+        if !stale {
+            // C/N trend: reuses `snr_history` (already fed ~500 ms by the rx poll
+            // task, [`crate::state::SNR_HISTORY_LEN`] = 120 deep → 60 s), the same
+            // ring the Command Rail's SNR trace and the micro views read. No new
+            // state — C/N ≈ peak/noise = SNR.
+            const LABEL: &str = "C/N trend";
+            const TREND_ANN_W: usize = 10; // budget for "±NN.N dB"
+            let snr_hist: Vec<f32> = sig.snr_history.iter().copied().collect();
+            let spark_w = iw.saturating_sub(1 + LABEL.chars().count() + 1 + TREND_ANN_W).max(1);
+            let (spark, p2p) = crate::ui::micro_common::spark_minmax(&snr_hist, spark_w);
+            if !spark.is_empty() {
+                let ann = format!("\u{00b1}{:.1} dB", p2p / 2.0);
+                let used = 1 + LABEL.chars().count() + 1 + spark.chars().count() + 1 + ann.chars().count();
+                let pad = iw.saturating_sub(used).max(1);
+                lines.push(Line::from(vec![
+                    Span::raw(" "),
+                    Span::styled(LABEL, Style::default().fg(theme.label)),
+                    Span::raw(" "),
+                    Span::styled(spark, val),
+                    Span::raw(" ".repeat(pad)),
+                    Span::styled(ann, dim),
+                ]));
+            } else {
+                lines.push(Line::from(vec![Span::raw(" "), Span::styled(LABEL, Style::default().fg(theme.label)), Span::raw("  "), dash()]));
+            }
+
+            // Crest / PAPR: reuses the exact ADC-loading model from the Lab RF
+            // bench (`rf_calc::adc_loading`) rather than re-deriving peak-minus-rms
+            // — full-bandwidth ADC crest factor, the same honest proxy the RF lab
+            // already shows for "constant-envelope vs peaky".
+            let n: u64 = state.iq.adc_signed_hist.iter().sum();
+            let load = crate::ui::rf_calc::adc_loading(
+                sig.adc_peak_dbfs as f64, sig.adc_rms_dbfs as f64, sig.adc_clip_events, n);
+            lines.push(metric("Crest / PAPR", vec![Span::styled(format!("{:.1} dB", load.crest_db), val)]));
+        } else {
+            lines.push(metric("C/N trend", vec![dash()]));
+            lines.push(metric("Crest / PAPR", vec![dash()]));
+        }
 
         crate::ui::chrome::fit_spacers(&mut lines, inner.height as usize);
         f.render_widget(Paragraph::new(lines), inner);
